@@ -11,6 +11,7 @@ class BashAI:
         self.config = self._load_or_create_config()
         self.client = anthropic.Anthropic(api_key=self.config['api_key'])
         self.current_dir = os.getcwd()
+        self.is_windows = os.name == 'nt'
 
     def _load_or_create_config(self) -> dict:
         """Load or create configuration file"""
@@ -28,6 +29,10 @@ class BashAI:
     def execute_command(self, cmd: str) -> str:
         """Execute a shell command and return output"""
         try:
+            # Force cmd.exe for Windows
+            if self.is_windows:
+                cmd = f'cmd /c "{cmd}"'
+            
             result = subprocess.run(
                 cmd,
                 shell=True,
@@ -35,7 +40,7 @@ class BashAI:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                executable="cmd.exe" if os.name == 'nt' else None
+                executable="cmd.exe" if self.is_windows else None
             )
             return result.stdout or "Command executed successfully"
         except subprocess.CalledProcessError as e:
@@ -52,7 +57,7 @@ class BashAI:
                 if user_input.lower() in ['exit', 'quit']:
                     break
 
-                # Get AI response
+                # Get AI response with current directory context
                 response = self.client.messages.create(
                     model="claude-3-haiku-20240307",
                     max_tokens=1000,
@@ -60,13 +65,13 @@ class BashAI:
                         "role": "user", 
                         "content": f"Current directory: {self.current_dir}\nUser request: {user_input}"
                     }],
-                    system="""You are Bash.ai, an AI that helps with command line tasks. 
-                    When asked to perform actions, respond with the exact command to execute enclosed in <execute> tags.
-                    For Windows, use these commands:
-                    - Create file: type nul > filename.txt
-                    - List files: dir
-                    - Make dir: mkdir name
-                    Example: <execute>type nul > test.txt</execute>"""
+                    system=f"""You are Bash.ai, an AI that executes command line tasks. Follow these rules:
+1. For Windows systems (current OS)
+2. Create files with: type nul > filename.txt
+3. List files with: dir
+4. Always use absolute paths when needed
+5. Enclose executable commands in <execute> tags
+6. Current directory: {self.current_dir}"""
                 )
 
                 ai_response = response.content[0].text
