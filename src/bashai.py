@@ -29,22 +29,29 @@ class BashAI:
     def execute_command(self, cmd: str) -> str:
         """Execute a shell command and return output"""
         try:
-            # Force cmd.exe for Windows
+            # For Windows, we need to run through cmd.exe with proper formatting
             if self.is_windows:
-                cmd = f'cmd /c "{cmd}"'
-            
+                # Handle paths with spaces by adding quotes
+                if ' ' in cmd and not cmd.startswith('"'):
+                    cmd = f'"{cmd}"'
+                # Force command through cmd.exe
+                full_cmd = f'cmd /c {cmd}'
+            else:
+                full_cmd = cmd
+
             result = subprocess.run(
-                cmd,
+                full_cmd,
                 shell=True,
                 check=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True,
-                executable="cmd.exe" if self.is_windows else None
+                text=True
             )
             return result.stdout or "Command executed successfully"
         except subprocess.CalledProcessError as e:
             return f"Error: {e.stderr}"
+        except Exception as e:
+            return f"System Error: {str(e)}"
 
     def start_interactive(self):
         """Start interactive session"""
@@ -65,12 +72,12 @@ class BashAI:
                         "role": "user", 
                         "content": f"Current directory: {self.current_dir}\nUser request: {user_input}"
                     }],
-                    system=f"""You are Bash.ai, an AI that executes command line tasks. Follow these rules:
-1. For Windows systems (current OS)
-2. Create files with: type nul > filename.txt
-3. List files with: dir
-4. Always use absolute paths when needed
-5. Enclose executable commands in <execute> tags
+                    system=f"""You are Bash.ai, an AI that executes command line tasks on Windows. Rules:
+1. Always provide Windows commands
+2. For file creation: type nul > filename.txt
+3. For directories: mkdir "dirname"
+4. For listing: dir
+5. Always use absolute paths with double quotes if spaces exist
 6. Current directory: {self.current_dir}"""
                 )
 
@@ -81,7 +88,11 @@ class BashAI:
                 if "<execute>" in ai_response:
                     cmd = ai_response.split("<execute>")[1].split("</execute>")[0].strip()
                     if input(f"\nExecute this command? [y/N] '{cmd}' ").lower() == 'y':
-                        print(f"\n{self.execute_command(cmd)}")
+                        result = self.execute_command(cmd)
+                        print(f"\n{result}")
+                        # Update current directory if cd command was executed
+                        if cmd.startswith('cd '):
+                            self.current_dir = os.getcwd()
 
             except KeyboardInterrupt:
                 print("\nUse 'exit' to quit")
