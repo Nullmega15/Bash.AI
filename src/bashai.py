@@ -12,12 +12,12 @@ MAX_RETRIES = 3
 
 class BashAI:
     def __init__(self):
-        self.config = self.load_or_create_config()  # Fixed method name
+        self.config = self._load_or_create_config()
         self.client = anthropic.Anthropic(api_key=self.config['api_key'])
         self.current_dir = os.getcwd()
         self.is_windows = os.name == 'nt'
 
-    def load_or_create_config(self) -> dict:  # Renamed method
+    def _load_or_create_config(self) -> dict:
         """Load or create configuration file"""
         if CONFIG_PATH.exists():
             with open(CONFIG_PATH) as f:
@@ -31,6 +31,12 @@ class BashAI:
         with open(CONFIG_PATH, 'w') as f:
             json.dump(config, f)
         return config
+
+    def _search_web(self, error: str):
+        """Search error solutions online"""
+        query = f"{error} site:stackoverflow.com OR site:github.com"
+        webbrowser.open(f"https://google.com/search?q={query.replace(' ', '+')}")
+        print(f"🔍 Searching web for: {error}")
 
     def execute_command(self, cmd: str) -> Tuple[str, bool]:
         """Execute command with auto-retry"""
@@ -47,59 +53,91 @@ class BashAI:
                     stderr=subprocess.PIPE,
                     text=True
                 )
-                return (result.stdout or "Command executed successfully", True)
+                return (result.stdout or "Command executed", True)
                 
             except subprocess.CalledProcessError as e:
                 if attempt < MAX_RETRIES:
-                    print(f"⚠️ Attempt {attempt + 1} failed. Retrying...")
+                    print(f"⚠️ Retry {attempt + 1}/{MAX_RETRIES}...")
                     time.sleep(1)
                     continue
                 return (f"Error: {e.stderr}", False)
-            except Exception as e:
-                return (f"System Error: {str(e)}", False)
 
-    def web_search(self, error: str):
-        """Search the web for solutions"""
-        query = f"{error} site:stackoverflow.com OR site:github.com"
-        webbrowser.open(f"https://google.com/search?q={query.replace(' ', '+')}")
-        print(f"🔍 Searching for solutions to: {error}")
+    def generate_code_file(self, request: str) -> str:
+        """Generate code files based on requests"""
+        response = self.client.messages.create(
+            model="claude-3-sonnet-20240229",
+            max_tokens=2000,
+            messages=[{
+                "role": "user",
+                "content": f"""Create complete code for: {request}
+                - Include all necessary code
+                - Add brief comments
+                - Save to appropriate filename
+                - Format for {"Windows" if self.is_windows else "Linux"}"""
+            }],
+            system="""You are a code generator. Respond with:
+            <filename>filename.ext</filename>
+            <code>
+            # Complete code here
+            </code>"""
+        )
+        return response.content[0].text
 
     def start_interactive(self):
-        """Start interactive session"""
-        print(f"\n💻 Bash.ai [Auto-Retry Mode] (dir: {self.current_dir})")
-        print("Type requests naturally. I'll execute and retry automatically.\n")
+        """Interactive session with code generation"""
+        print(f"\n💻 Bash.ai Code Generator (dir: {self.current_dir})")
+        print("Request code files naturally like: 'make a Python calculator'\n")
         
         while True:
             try:
-                user_input = input("bash.ai> ").strip()
+                user_input = input("\nbash.ai> ").strip()
                 if user_input.lower() in ['exit', 'quit']:
                     break
 
-                # Get AI response
-                response = self.client.messages.create(
-                    model="claude-3-haiku-20240307",
-                    max_tokens=1000,
-                    messages=[{
-                        "role": "user", 
-                        "content": f"Current dir: {self.current_dir}\nRequest: {user_input}"
-                    }],
-                    system=f"""You are Bash.ai. Respond with commands in <execute> tags for {"Windows" if self.is_windows else "Linux"}"""
-                )
-
-                ai_response = response.content[0].text
-                
-                # Execute if command found
-                if "<execute>" in ai_response:
-                    cmd = ai_response.split("<execute>")[1].split("</execute>")[0].strip()
-                    print(f"\n⚙️ Executing: {cmd}")
-                    output, success = self.execute_command(cmd)
-                    print(output)
+                # Code generation mode
+                if any(word in user_input.lower() for word in ['make', 'create', 'generate']):
+                    code_response = self.generate_code_file(user_input)
                     
-                    if not success:
-                        if input("Search web for solutions? [y/N] ").lower() == 'y':
-                            self.web_search(output)
+                    if "<filename>" in code_response:
+                        filename = code_response.split("<filename>")[1].split("</filename>")[0].strip()
+                        code = code_response.split("<code>")[1].split("</code>")[0].strip()
+                        
+                        print(f"\n📁 Creating: {filename}")
+                        with open(filename, 'w') as f:
+                            f.write(code)
+                        
+                        print(f"✅ Successfully created {filename}")
+                        if filename.endswith('.py'):
+                            run = input(f"Run {filename}? [y/N] ").lower()
+                            if run == 'y':
+                                output, success = self.execute_command(f"python {filename}")
+                                print(output)
+                    else:
+                        print(code_response)
+                
+                # Normal command execution
                 else:
-                    print(ai_response)
+                    response = self.client.messages.create(
+                        model="claude-3-haiku-20240307",
+                        max_tokens=1000,
+                        messages=[{
+                            "role": "user", 
+                            "content": f"Request: {user_input}\nCurrent dir: {self.current_dir}"
+                        }],
+                        system=f"""Respond with commands in <execute> tags for {"Windows" if self.is_windows else "Linux"}"""
+                    )
+                    ai_response = response.content[0].text
+                    
+                    if "<execute>" in ai_response:
+                        cmd = ai_response.split("<execute>")[1].split("</execute>")[0].strip()
+                        print(f"\n⚙️ Executing: {cmd}")
+                        output, success = self.execute_command(cmd)
+                        print(output)
+                        
+                        if not success and input("Search web for solutions? [y/N] ").lower() == 'y':
+                            self._search_web(output)
+                    else:
+                        print(ai_response)
 
             except KeyboardInterrupt:
                 print("\nUse 'exit' to quit")
