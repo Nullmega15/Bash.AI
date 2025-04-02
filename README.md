@@ -2,105 +2,82 @@
 
 [![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/Nullmega15/bash.ai/pulls)
+[![Platforms](https://img.shields.io/badge/Windows%20%26%20Linux-Supported-green.svg)](https://github.com/Nullmega15/bash.ai)
 
-**Your AI-powered command line copilot** that understands natural language and executes commands across Windows and Linux systems.
+**AI-powered command-line assistant** that understands natural language and executes commands on both Windows and Linux.
 
-## ✨ Features
+![Demo](docs/demo.gif)
 
-- **Natural Language Understanding**: Describe what you want in plain English
-- **Cross-Platform Support**: Works on Windows CMD and Linux terminals
-- **Smart Error Recovery**: Automatically fixes common command errors
-- **File System Awareness**: Knows about your files and directories
-- **Web Search Integration**: Finds solutions when stuck
-- **Multi-Command Support**: Execute complex command sequences
+## 🚀 Installation
 
-## 🚀 Quick Install
-
-### Windows (PowerShell)
+### Windows
 ```powershell
-# One-line install (admin not required)
-irm https://raw.githubusercontent.com/Nullmega15/bash.ai/main/install/install_windows.ps1 | iex
+# 1. Clone repository
+git clone https://github.com/Nullmega15/bash.ai.git
+cd bash.ai
+
+# 2. Install dependencies
+python -m pip install -r requirements.txt
+
+# 3. Run (first launch will prompt for API key)
+python src\bashai.py
 ```
 
-### Linux/macOS
+### Linux (Debian/Ubuntu)
 ```bash
-# One-line install
-curl -sSL https://raw.githubusercontent.com/Nullmega15/bash.ai/main/install/install_linux.sh | bash
+# 1. Install dependencies
+sudo apt update && sudo apt install -y python3 python3-pip git
+
+# 2. Clone repository
+git clone https://github.com/Nullmega15/bash.ai.git
+cd bash.ai
+
+# 3. Install Python packages
+pip3 install -r requirements.txt
+
+# 4. Make launcher executable
+chmod +x src/bashai.py
+
+# 5. Run (first launch will prompt for API key)
+./src/bashai.py
 ```
 
-## 🖥️ Basic Usage
+### Linux (One-Liner)
 ```bash
-# Single command mode
-bashai "list all python files in my project"
-
-# Interactive mode
-bashai
-> what's in my downloads folder?
-> show running processes
-> exit
+bash <(curl -s https://raw.githubusercontent.com/Nullmega15/bash.ai/main/scripts/linux-install.sh)
 ```
 
-## 📚 Common Examples
-```bash
-# File operations
-bashai "find all .txt files larger than 1MB"
-bashai "create a backup of my documents folder"
+## 🔑 First-Time Setup
 
-# System monitoring
-bashai "what's using my disk space?"
-bashai "show running processes sorted by CPU usage"
+1. Get your free Anthropic API key.
+2. Paste it when prompted during the first run.
+3. Keys are saved in `~/.bashai_config.json`.
 
-# Development tasks
-bashai "initialize a new python project with virtualenv"
-bashai "commit all changes with message 'bug fixes'"
+## 🖥️ Usage Examples
 
-# Network utilities
-bashai "ping google.com 5 times"
-bashai "check open ports on my machine"
-```
+| Request              | Windows Command       | Linux Command               |
+|----------------------|-----------------------|-----------------------------|
+| Create file          | `type nul > notes.txt`| `touch notes.txt`           |
+| List files           | `dir`                 | `ls -l`                     |
+| Find Python files    | `dir *.py /s`         | `find . -name "*.py"`       |
+| Check disk space     | `wmic logicaldisk get`| `df -h`                     |
 
-## 🔧 Configuration
-Get your Anthropic API key from Anthropic Console
+## 🌟 Features
 
-Configure Bash.ai:
-```bash
-bashai --configure
-# Follow prompts to enter your API key
-```
-Or set environment variable:
-```bash
-export ANTHROPIC_API_KEY="your_key_here"
-```
+- **OS-aware commands** - Auto-detects Windows/Linux.
+- **Natural language** - "Show me big files" → executes proper find/dir command.
+- **Interactive mode** - Chat-like interface.
+- **Safe execution** - Asks confirmation for dangerous commands.
 
-## 🌟 Why Choose Bash.ai?
-✔ Saves Time - No more memorizing obscure command flags
-✔ Reduces Errors - Automatic command validation and correction
-✔ Learn as You Go - Explanations for every suggested command
-✔ Privacy Focused - Processes most commands locally
+## 🐧 Linux-Specific Notes
 
-## 🛠 Troubleshooting
-If you encounter issues:
-```bash
-# Enable debug mode
-bashai --debug
-
-# Check version
-bashai --version
-
-# Update to latest version
-bashai --update
-```
-
-## 🤝 Contributing
-We welcome contributions! Here's how:
-1. Fork the repository
-2. Create a feature branch (git checkout -b feature/amazing-feature)
-3. Commit your changes (git commit -m 'Add amazing feature')
-4. Push to the branch (git push origin feature/amazing-feature)
-5. Open a Pull Request
+- Requires Python 3.8+.
+- Uses standard Unix commands (ls, grep, find, etc.).
+- For global access:
+  ```bash
+  sudo ln -s $(pwd)/src/bashai.py /usr/local/bin/bashai
+  ```
 
 ## 📜 License
-Distributed under the MIT License. See LICENSE for more information.
 
-💡 Pro Tip: Run bashai --help to see all available options
+MIT © Nullmega_
