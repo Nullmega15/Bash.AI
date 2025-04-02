@@ -1,62 +1,44 @@
-<#
-.SYNOPSIS
-Bash.ai Windows Installer
-#>
+@'
+# Corrected Bash.ai Windows Installer
+$ErrorActionPreference = "Stop"
 
-# Check if running as admin
-$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+# Set proper paths
+$repoDir = $PWD
+$srcPath = Join-Path $repoDir "src\bashai.py"
 
-# Check for Python
-if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
-    Write-Host "Python not found. Installing Python 3..."
-    winget install Python.Python.3 --accept-package-agreements --accept-source-agreements
-    if (-not $?) {
-        Write-Error "Failed to install Python. Please install it manually from python.org"
-        exit 1
-    }
-}
-
-# Clone repository if not already present
-if (-not (Test-Path "bash.ai")) {
-    git clone https://github.com/Nullmega15/bash.ai.git
-    cd bash.ai
+# Verify source file exists
+if (-not (Test-Path $srcPath)) {
+    throw "Source file not found at $srcPath"
 }
 
 # Install dependencies
-Write-Host "Installing dependencies..."
-python -m pip install -r .\requirements.txt
-if (-not $?) {
-    Write-Error "Failed to install dependencies"
-    exit 1
-}
+python -m pip install -r (Join-Path $repoDir "requirements.txt")
 
-# Create launcher
-Write-Host "Creating launcher..."
+# Create launcher in user's local bin
+$launcherPath = Join-Path $env:USERPROFILE "AppData\Local\Microsoft\WindowsApps\bashai.cmd"
 @"
 @echo off
-python "%~dp0bash.ai\src\bashai.py" %*
-"@ | Out-File -Encoding ascii bashai.cmd
+python "$srcPath" %*
+"@ | Out-File -Encoding ascii $launcherPath
 
-# Add to PATH
-$currentPath = [Environment]::GetEnvironmentVariable("Path", "User")
-if (-not $currentPath.Contains((Get-Location).Path)) {
+# Add to PATH if not already present
+$path = [Environment]::GetEnvironmentVariable("Path", "User")
+if (-not $path.Contains($env:USERPROFILE + "\AppData\Local\Microsoft\WindowsApps")) {
     [Environment]::SetEnvironmentVariable(
         "Path",
-        $currentPath + ";" + (Get-Location).Path,
+        $path + ";" + $env:USERPROFILE + "\AppData\Local\Microsoft\WindowsApps",
         "User"
     )
-    $env:Path += ";" + (Get-Location).Path
 }
 
 Write-Host @"
 
-Bash.ai installed successfully!
-
+✅ Bash.ai installed successfully!
 Usage:
   bashai [command]    - Execute single command
   bashai              - Interactive mode
 
-Try these examples:
-  bashai "list files"
-  bashai "show processes"
+First run configuration:
+  bashai --configure
 "@
+'@ | Out-File -Encoding ascii install_windows.ps1
