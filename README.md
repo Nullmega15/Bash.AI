@@ -1,83 +1,104 @@
-# Bash.ai 🤖💻
+# Bash.ai 2.0 🤖⚡
 
-[![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Platforms](https://img.shields.io/badge/Windows%20%26%20Linux-Supported-green.svg)](https://github.com/Nullmega15/bash.ai)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Windows/Linux](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)](https://github.com/Nullmega15/bash.ai)
 
-**AI-powered command-line assistant** that understands natural language and executes commands on both Windows and Linux.
+**The self-healing CLI assistant** that fixes errors automatically and finds solutions online when stuck.
 
-![Demo](docs/demo.gif)
+![Demo](https://github.com/Nullmega15/bash.ai/blob/main/docs/retry-demo.gif?raw=true)
 
-## 🚀 Installation
+## 🚀 Features
 
-### Windows
+- **Auto-Retry System**: Attempts commands up to 3 times with AI-suggested fixes
+- **Web Search Integration**: Finds solutions on Stack Overflow/Microsoft Docs when errors persist
+- **OS-Aware Execution**: Uses native commands for Windows (`cmd`) and Linux (`bash`)
+- **Smart Error Recovery**: Analyzes errors and suggests corrected commands
+- **Interactive Chat**: Natural language interface with context awareness
+
+## 📦 Installation
+
+### Windows (PowerShell)
 ```powershell
-# 1. Clone repository
+# Clone repository
 git clone https://github.com/Nullmega15/bash.ai.git
 cd bash.ai
 
-# 2. Install dependencies
-python -m pip install -r requirements.txt
+# Install dependencies
+python -m pip install anthropic webbrowser
 
-# 3. Run (first launch will prompt for API key)
+# Run interactive mode
 python src\bashai.py
 ```
 
-### Linux (Debian/Ubuntu)
+### Linux/macOS
 ```bash
-# 1. Install dependencies
-sudo apt update && sudo apt install -y python3 python3-pip git
+# Install dependencies
+sudo apt-get install python3 python3-pip git  # Debian/Ubuntu
 
-# 2. Clone repository
+# Clone and run
 git clone https://github.com/Nullmega15/bash.ai.git
 cd bash.ai
-
-# 3. Install Python packages
 pip3 install -r requirements.txt
-
-# 4. Make launcher executable
-chmod +x src/bashai.py
-
-# 5. Run (first launch will prompt for API key)
 ./src/bashai.py
 ```
 
-### Linux (One-Liner)
+## 🛠️ Usage Examples
+
+### Basic Command Execution
 ```bash
-bash <(curl -s https://raw.githubusercontent.com/Nullmega15/bash.ai/main/scripts/linux-install.sh)
+bash.ai> create log files
+✅ Executing: touch log1.txt log2.txt
 ```
 
-## 🔑 First-Time Setup
+### Auto-Retry Demonstration
+```bash
+bash.ai> delete protected folder
+⚠️ Attempt 1: rm -rf /protected → Permission denied
+🔄 Retry 2: sudo rm -rf /protected → Success
+```
 
-1. Get your Anthropic API key.
-2. Paste it when prompted during the first run.
-3. Keys are saved in `~/.bashai_config.json`.
+### Web Search Integration
+```bash
+bash.ai> mount encrypted drive
+❌ Error: mount: unknown filesystem type 'crypto_LUKS'
+🔍 Opening: https://stackoverflow.com/search?q=mount+crypto_LUKS...
+```
 
-## 🖥️ Usage Examples
+## 🌟 New in 2.0
 
-| Request              | Windows Command       | Linux Command               |
-|----------------------|-----------------------|-----------------------------|
-| Create file          | `type nul > notes.txt`| `touch notes.txt`           |
-| List files           | `dir`                 | `ls -l`                     |
-| Find Python files    | `dir *.py /s`         | `find . -name "*.py"`       |
-| Check disk space     | `wmic logicaldisk get`| `df -h`                     |
+| Feature     | Example                                  |
+|-------------|------------------------------------------|
+| Auto-Retry  | Fixes permission/typo errors automatically |
+| Web Search  | [y/N] prompt to search error solutions   |
+| Smart Fixes | Suggests sudo when needed on Linux       |
+| Execution Log | Shows all retry attempts clearly       |
 
-## 🌟 Features
+## ⚙️ Configuration
 
-- **OS-aware commands** - Auto-detects Windows/Linux.
-- **Natural language** - "Show me big files" → executes proper find/dir command.
-- **Interactive mode** - Chat-like interface.
-- **Safe execution** - Asks confirmation for dangerous commands.
+First run creates `~/.bashai_config.json`:
 
-## 🐧 Linux-Specific Notes
+```json
+{
+  "api_key": "your_anthropic_key",
+  "auto_retry": true,
+  "max_retries": 3,
+  "enable_web_search": true
+}
+```
 
-- Requires Python 3.8+.
-- Uses standard Unix commands (ls, grep, find, etc.).
-- For global access:
-  ```bash
-  sudo ln -s $(pwd)/src/bashai.py /usr/local/bin/bashai
-  ```
+## 📚 Documentation
 
-## 📜 License
+- [Command Reference](docs/command_reference.md)
+- [Troubleshooting Guide](docs/troubleshooting.md)
+- [API Key Setup](docs/api_key_setup.md)
 
-MIT © Nullmega_
+## 🐛 Reporting Issues
+
+Open a GitHub Issue with:
+
+- The command you tried
+- Full error output
+- OS version
+
+💡 Pro Tip: Use `bashai --debug` for detailed error logs when troubleshooting.
