@@ -86,7 +86,7 @@ class BashAI:
     def start_interactive(self):
         """Interactive session with code generation"""
         print(f"\n💻 Bash.ai Code Generator (dir: {self.current_dir})")
-        print("Request code files naturally like: 'make a Python calculator'\n")
+        print("Request code files naturally and get in the terminal\n")
         
         while True:
             try:
