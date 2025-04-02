@@ -49,7 +49,7 @@ bash <(curl -s https://raw.githubusercontent.com/Nullmega15/bash.ai/main/scripts
 
 ## 🔑 First-Time Setup
 
-1. Get your free Anthropic API key.
+1. Get your Anthropic API key.
 2. Paste it when prompted during the first run.
 3. Keys are saved in `~/.bashai_config.json`.
 
