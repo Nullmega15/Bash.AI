@@ -12,6 +12,7 @@ class BashAI:
         self.client = anthropic.Anthropic(api_key=self.config['api_key'])
         self.current_dir = os.getcwd()
         self.is_windows = os.name == 'nt'
+        self.auto_execute = True  # Set to True to execute commands automatically
 
     def _load_or_create_config(self) -> dict:
         """Load or create configuration file"""
@@ -21,7 +22,7 @@ class BashAI:
         
         print("First-time setup: Please enter your Anthropic API key")
         api_key = input("API key: ").strip()
-        config = {"api_key": api_key}
+        config = {"api_key": api_key, "auto_execute": True}
         with open(CONFIG_PATH, 'w') as f:
             json.dump(config, f)
         return config
@@ -29,12 +30,9 @@ class BashAI:
     def execute_command(self, cmd: str) -> str:
         """Execute a shell command and return output"""
         try:
-            # For Windows, we need to run through cmd.exe with proper formatting
             if self.is_windows:
-                # Handle paths with spaces by adding quotes
                 if ' ' in cmd and not cmd.startswith('"'):
                     cmd = f'"{cmd}"'
-                # Force command through cmd.exe
                 full_cmd = f'cmd /c {cmd}'
             else:
                 full_cmd = cmd
@@ -47,7 +45,7 @@ class BashAI:
                 stderr=subprocess.PIPE,
                 text=True
             )
-            return result.stdout or "Command executed successfully"
+            return result.stdout or "Done"
         except subprocess.CalledProcessError as e:
             return f"Error: {e.stderr}"
         except Exception as e:
@@ -55,44 +53,48 @@ class BashAI:
 
     def start_interactive(self):
         """Start interactive session"""
-        print(f"Bash.ai ready (Current dir: {self.current_dir})")
-        print("Type commands naturally. I'll execute them when needed.")
+        print(f"\nBash.ai [Auto-Execute Mode] (Current dir: {self.current_dir})")
+        print("I'll automatically perform actions you request. Type 'exit' to quit.\n")
         
         while True:
             try:
-                user_input = input("\nbash.ai> ").strip()
+                user_input = input("bash.ai> ").strip()
                 if user_input.lower() in ['exit', 'quit']:
                     break
+                if not user_input:
+                    continue
 
-                # Get AI response with current directory context
+                # Get AI response
                 response = self.client.messages.create(
                     model="claude-3-haiku-20240307",
                     max_tokens=1000,
                     messages=[{
                         "role": "user", 
-                        "content": f"Current directory: {self.current_dir}\nUser request: {user_input}"
+                        "content": f"Current dir: {self.current_dir}\nRequest: {user_input}"
                     }],
-                    system=f"""You are Bash.ai, an AI that executes command line tasks on Windows. Rules:
-1. Always provide Windows commands
+                    system=f"""You are Bash.ai, an AI that executes Windows commands automatically. Rules:
+1. When asked to DO something, respond ONLY with the command in <execute> tags
 2. For file creation: type nul > filename.txt
-3. For directories: mkdir "dirname"
+3. For directories: mkdir "name" 
 4. For listing: dir
-5. Always use absolute paths with double quotes if spaces exist
+5. Always use absolute paths with quotes
 6. Current directory: {self.current_dir}"""
                 )
 
                 ai_response = response.content[0].text
-                print(f"\n{ai_response}")
-
-                # Execute commands found in response
+                
+                # Extract and execute command
                 if "<execute>" in ai_response:
                     cmd = ai_response.split("<execute>")[1].split("</execute>")[0].strip()
-                    if input(f"\nExecute this command? [y/N] '{cmd}' ").lower() == 'y':
-                        result = self.execute_command(cmd)
-                        print(f"\n{result}")
-                        # Update current directory if cd command was executed
-                        if cmd.startswith('cd '):
-                            self.current_dir = os.getcwd()
+                    print(f"\nExecuting: {cmd}")
+                    result = self.execute_command(cmd)
+                    print(result)
+                else:
+                    print(ai_response)
+
+                # Update current directory if cd command was executed
+                if "<execute>" in ai_response and "cd " in ai_response.lower():
+                    self.current_dir = os.getcwd()
 
             except KeyboardInterrupt:
                 print("\nUse 'exit' to quit")
