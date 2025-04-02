@@ -16,6 +16,10 @@ Bash.ai is an intelligent command line assistant that helps you work more effici
 ```powershell
 iwr -useb https://raw.githubusercontent.com/yourusername/bash.ai/main/install/install_windows.ps1 | iex
 ```
+# Or manually
+'''git clone https://github.com/yourusername/bash.ai.git
+cd bash.ai
+.\install\install_windows.ps1'''
 
 ### Linux
 ```bash
