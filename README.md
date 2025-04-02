@@ -1,104 +1,116 @@
-# Bash.ai 2.0 🤖⚡
+# Bash.ai 🤖💻
 
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Windows/Linux](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)](https://github.com/Nullmega15/bash.ai)
+[![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Platforms](https://img.shields.io/badge/Windows%20%26%20Linux-Supported-green.svg)](https://github.com/Nullmega15/bash.ai)
 
-**The self-healing CLI assistant** that fixes errors automatically and finds solutions online when stuck.
+**AI-powered command-line assistant** that understands natural language and executes commands on both Windows and Linux.
 
-![Demo](https://github.com/Nullmega15/bash.ai/blob/main/docs/retry-demo.gif?raw=true)
+![Demo](docs/demo.gif)
 
-## 🚀 Features
+## 🚀 Installation
 
-- **Auto-Retry System**: Attempts commands up to 3 times with AI-suggested fixes
-- **Web Search Integration**: Finds solutions on Stack Overflow/Microsoft Docs when errors persist
-- **OS-Aware Execution**: Uses native commands for Windows (`cmd`) and Linux (`bash`)
-- **Smart Error Recovery**: Analyzes errors and suggests corrected commands
-- **Interactive Chat**: Natural language interface with context awareness
+### Linux (Debian/Ubuntu)
+```bash
+# 1. Install dependencies
+sudo apt update && sudo apt install -y python3 python3-pip git
 
-## 📦 Installation
+# 2. Clone repository
+git clone https://github.com/Nullmega15/bash.ai.git
+cd bash.ai
+
+# 3. Install Python packages
+pip3 install -r requirements.txt --user
+
+# 4. Run it (use python3 explicitly)
+python3 src/bashai.py
+```
 
 ### Windows (PowerShell)
 ```powershell
-# Clone repository
+# 1. Clone repository
 git clone https://github.com/Nullmega15/bash.ai.git
 cd bash.ai
 
-# Install dependencies
-python -m pip install anthropic webbrowser
+# 2. Install dependencies
+python -m pip install -r requirements.txt
 
-# Run interactive mode
+# 3. Run it
 python src\bashai.py
 ```
 
-### Linux/macOS
+### macOS
 ```bash
-# Install dependencies
-sudo apt-get install python3 python3-pip git  # Debian/Ubuntu
+# 1. Install Homebrew (if not installed)
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
-# Clone and run
-git clone https://github.com/Nullmega15/bash.ai.git
-cd bash.ai
-pip3 install -r requirements.txt
-./src/bashai.py
+# 2. Install dependencies
+brew install python git
+
+# 3. Follow Linux instructions from step 2 onward
 ```
 
-## 🛠️ Usage Examples
+## 🔑 First-Time Setup
+1. Get your free Anthropic API key
+2. Paste it when prompted during first run
 
-### Basic Command Execution
+Configuration saved to:
+- Linux/macOS: `~/.bashai_config.json`
+- Windows: `%USERPROFILE%\.bashai_config.json`
+
+## 💡 Usage Examples
+
+### Basic Commands
 ```bash
-bash.ai> create log files
-✅ Executing: touch log1.txt log2.txt
+bash.ai> list all python files in this folder
+bash.ai> create a new directory called projects
+bash.ai> show disk usage
 ```
 
-### Auto-Retry Demonstration
+### Code Generation
 ```bash
-bash.ai> delete protected folder
-⚠️ Attempt 1: rm -rf /protected → Permission denied
-🔄 Retry 2: sudo rm -rf /protected → Success
+bash.ai> make a python calculator
+bash.ai> create a bash script to backup my home directory
 ```
 
-### Web Search Integration
+## 🛠️ Troubleshooting
+
+### Linux Errors
 ```bash
-bash.ai> mount encrypted drive
-❌ Error: mount: unknown filesystem type 'crypto_LUKS'
-🔍 Opening: https://stackoverflow.com/search?q=mount+crypto_LUKS...
+# If you see "import: command not found":
+python3 src/bashai.py  # Use python3 explicitly
+
+# If missing dependencies:
+sudo apt install python3-venv  # For Ubuntu/Debian
 ```
 
-## 🌟 New in 2.0
+### Windows Errors
+```powershell
+# If Python not found:
+winget install Python.Python.3
 
-| Feature     | Example                                  |
-|-------------|------------------------------------------|
-| Auto-Retry  | Fixes permission/typo errors automatically |
-| Web Search  | [y/N] prompt to search error solutions   |
-| Smart Fixes | Suggests sudo when needed on Linux       |
-| Execution Log | Shows all retry attempts clearly       |
-
-## ⚙️ Configuration
-
-First run creates `~/.bashai_config.json`:
-
-```json
-{
-  "api_key": "your_anthropic_key",
-  "auto_retry": true,
-  "max_retries": 3,
-  "enable_web_search": true
-}
+# If permission denied:
+Start-Process PowerShell -Verb RunAs  # Run as admin
 ```
 
-## 📚 Documentation
+### Common Fixes
 
-- [Command Reference](docs/command_reference.md)
-- [Troubleshooting Guide](docs/troubleshooting.md)
-- [API Key Setup](docs/api_key_setup.md)
+#### Python path issues:
+```bash
+which python3  # Verify Python installation
+```
 
-## 🐛 Reporting Issues
+#### Reset configuration:
+```bash
+rm ~/.bashai_config.json  # Linux/macOS
+del %USERPROFILE%\.bashai_config.json  # Windows
+```
 
-Open a GitHub Issue with:
+## 🌟 Features
+- Natural language understanding - "Delete all temp files" → `rm -rf /tmp/*`
+- Auto-complete suggestions - Press Tab for command ideas
+- Cross-platform - Works on Windows, Linux, and macOS
+- Code generation - Creates ready-to-run scripts
 
-- The command you tried
-- Full error output
-- OS version
-
-💡 Pro Tip: Use `bashai --debug` for detailed error logs when troubleshooting.
+## 📜 License
+MIT © Nullmega_
