@@ -1,46 +1,56 @@
 import os
 import anthropic
+import readline  # For Linux/Mac, use pyreadline3 for Windows
 from typing import Optional
-import json
-from pathlib import Path
-
-CONFIG_PATH = Path.home() / ".bashai_config.json"
 
 class BashAI:
     def __init__(self):
-        self.config = self._load_or_create_config()
+        self.config = self._load_config()
         self.client = anthropic.Anthropic(api_key=self.config['api_key'])
         self.history = []
+    
+    def _load_config(self):
+        """Load configuration from file"""
+        config_path = os.path.expanduser("~/.bashai_config.json")
+        if not os.path.exists(config_path):
+            print("Welcome to Bash.ai! Let's configure your API key.")
+            api_key = input("Enter your Anthropic API key: ").strip()
+            with open(config_path, 'w') as f:
+                f.write(f'{{"api_key": "{api_key}"}}')
+            return {"api_key": api_key}
+        
+        with open(config_path) as f:
+            return {"api_key": f.read().strip()}
 
-    def _load_or_create_config(self) -> dict:
-        """Load or create configuration file"""
-        default_config = {
-            "api_key": "",
-            "max_history": 100,
-            "safe_mode": True
-        }
-
-        try:
-            if CONFIG_PATH.exists():
-                with open(CONFIG_PATH) as f:
-                    return {**default_config, **json.load(f)}
-            else:
-                print("Welcome to Bash.ai! Let's configure your API key.")
-                api_key = input("Enter your Anthropic API key: ").strip()
-                config = {**default_config, "api_key": api_key}
-                with open(CONFIG_PATH, 'w') as f:
-                    json.dump(config, f)
-                return config
-        except Exception as e:
-            print(f"Error loading config: {e}")
-            return default_config
+    def start_interactive(self):
+        """Start the interactive shell"""
+        print("\n=== Bash.ai Interactive Mode ===")
+        print("Type 'exit' or 'quit' to end the session\n")
+        
+        while True:
+            try:
+                user_input = input("bash.ai> ").strip()
+                if user_input.lower() in ['exit', 'quit']:
+                    break
+                
+                # Get response from AI
+                response = self.client.messages.create(
+                    model="claude-3-haiku-20240307",
+                    max_tokens=1024,
+                    messages=[{"role": "user", "content": user_input}]
+                )
+                
+                print(f"\n{response.content[0].text}\n")
+                
+            except KeyboardInterrupt:
+                print("\nUse 'exit' or 'quit' to end the session")
+            except Exception as e:
+                print(f"Error: {str(e)}")
 
 def main():
     print("Bash.ai v1.0 - AI Command Line Assistant")
     ai = BashAI()
-
-    # Your main interactive code here
-    print("Configuration successful! Ready to use Bash.ai.")
+    ai.start_interactive()  # This launches the interactive mode
 
 if __name__ == "__main__":
     main()
