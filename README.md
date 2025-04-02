@@ -51,7 +51,7 @@ brew install python git
 ```
 
 ## 🔑 First-Time Setup
-1. Get your free Anthropic API key
+1. Get your Anthropic API key
 2. Paste it when prompted during first run
 
 Configuration saved to:
