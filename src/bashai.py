@@ -161,7 +161,7 @@ class BashAI:
                     model="claude-3-haiku-20240307",
                     max_tokens=1000,
                     messages=[{
-                        "role": "user", 
+                        "role": "user",
                         "content": f"Request: {user_input}\nCurrent dir: {self.current_dir}"
                     }],
                     system="""Respond with:
@@ -171,6 +171,15 @@ class BashAI:
 
                 ai_response = response.content[0].text
                 print(ai_response)
+
+                # Extract and execute command
+                if "<execute>" in ai_response and "</execute>" in ai_response:
+                    command = ai_response.split("<execute>")[1].split("</execute>")[0].strip()
+                    print(f"Executing command: {command}")
+                    output, success = self._execute_command(command)
+                    print(output)
+                else:
+                    print(ai_response)
 
             except KeyboardInterrupt:
                 print("\nUse 'exit' to quit")
