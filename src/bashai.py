@@ -4,7 +4,7 @@ import json
 import webbrowser
 import anthropic
 from pathlib import Path
-from typing import Tuple, Dict, List  # Fixed Tuple import
+from typing import Tuple, Dict, List
 from threading import Thread
 import sys
 import time
@@ -45,11 +45,20 @@ class BashAI:
         self.current_dir = os.getcwd()
         self.is_windows = os.name == 'nt'
         self.shell_commands = self._load_shell_commands()
+        self.shell_type = self._detect_shell()
+
+    def _detect_shell(self) -> str:
+        """Detect the current shell type"""
+        if self.is_windows:
+            if 'powershell' in os.environ.get('SHELL', '').lower():
+                return 'powershell'
+            return 'cmd'
+        return 'bash'
 
     def _load_shell_commands(self) -> Dict[str, List[str]]:
         """Predefined commands for CMD, PowerShell and Bash"""
         return {
-            'windows_cmd': [
+            'cmd': [
                 'dir', 'cd', 'copy', 'del', 'mkdir', 'rmdir', 
                 'type', 'find', 'findstr', 'tasklist', 'taskkill',
                 'systeminfo', 'ipconfig', 'ping', 'tracert', 'netstat',
@@ -107,7 +116,7 @@ class BashAI:
                     if self.is_windows:
                         if ' ' in cmd and not cmd.startswith('"'):
                             cmd = f'"{cmd}"'
-                        full_cmd = f'cmd /c {cmd}' if 'powershell' not in cmd.lower() else cmd
+                        full_cmd = f'cmd /c {cmd}' if self.shell_type == 'cmd' else cmd
                     else:
                         full_cmd = cmd
 
@@ -128,12 +137,39 @@ class BashAI:
                         continue
                     return (f"✗ Error: {last_error}", False)
 
+    def _generate_code(self, request: str) -> str:
+        """Generate code based on request"""
+        with Spinner("Generating code"):
+            response = self.client.messages.create(
+                model="claude-3-sonnet-20240229",
+                max_tokens=2000,
+                messages=[{
+                    "role": "user", 
+                    "content": f"""Create complete code for: {request}
+                    Requirements:
+                    1. Include all necessary code
+                    2. Add brief comments
+                    3. Save to appropriate filename
+                    4. Format for {self.shell_type.upper()}"""
+                }],
+                system="""Respond with:
+                <filename>filename.ext</filename>
+                <code>
+                # Complete code here
+                </code>"""
+            )
+            return response.content[0].text
+
+    def _show_help(self):
+        """Show available commands for current shell"""
+        print(f"\nAvailable {self.shell_type.upper()} commands:")
+        for cmd in self.shell_commands[self.shell_type]:
+            print(f"- {cmd}")
+        print("\nTry: 'list files', 'show processes', 'make python script'")
+
     def start_interactive(self):
         """Start interactive session with enhanced command knowledge"""
-        shell_type = "powershell" if "powershell" in os.environ.get('SHELL', '').lower() else (
-            "cmd" if self.is_windows else "bash"
-        )
-        print(f"\n💻 Bash.ai [{shell_type.upper()} Mode] (dir: {self.current_dir})")
+        print(f"\n💻 Bash.ai [{self.shell_type.upper()} Mode] (dir: {self.current_dir})")
         print("Type commands naturally or 'help' for examples\n")
         
         while True:
@@ -145,23 +181,45 @@ class BashAI:
                     self._show_help()
                     continue
 
+                # Handle code generation requests
+                if any(word in user_input.lower() for word in ['make', 'create', 'generate']):
+                    code_response = self._generate_code(user_input)
+                    
+                    if "<filename>" in code_response:
+                        filename = code_response.split("<filename>")[1].split("</filename>")[0].strip()
+                        code = code_response.split("<code>")[1].split("</code>")[0].strip()
+                        
+                        print(f"\n📄 Creating: {filename}")
+                        with open(filename, 'w') as f:
+                            f.write(code)
+                        
+                        print(f"✓ Successfully created {filename}")
+                        if filename.endswith('.py'):
+                            run = input(f"Run {filename}? [y/N] ").lower()
+                            if run == 'y':
+                                output, success = self.execute_command(f"python {filename}")
+                                print(output)
+                    else:
+                        print(code_response)
+                    continue
+
                 # Get AI response with command knowledge
                 response = self.client.messages.create(
-                    model="claude-3-sonnet-20240229",
+                    model="claude-3-haiku-20240307",
                     max_tokens=1000,
                     messages=[{
                         "role": "user", 
                         "content": f"""Request: {user_input}
-                        Current shell: {shell_type}
+                        Current shell: {self.shell_type}
                         Current dir: {self.current_dir}
-                        Available commands: {self.shell_commands[f'{shell_type}_commands' if shell_type != 'powershell' else 'powershell']}"""
+                        Available commands: {self.shell_commands[self.shell_type]}"""
                     }],
-                    system=f"""You are Bash.ai, an expert {shell_type} assistant. Rules:
-1. Respond with ONLY the command in <execute> tags when action is needed
-2. For PowerShell: Use full cmdlets (Get-ChildItem not dir)
-3. For CMD: Use traditional commands (dir not ls)
+                    system=f"""You are Bash.ai, an expert {self.shell_type} assistant. Rules:
+1. For actions: respond ONLY with command in <execute> tags
+2. For PowerShell: Use full cmdlets
+3. For CMD: Use traditional commands
 4. For Bash: Use standard Unix commands
-5. Always use proper path quoting"""
+5. Current directory: {self.current_dir}"""
                 )
 
                 ai_response = response.content[0].text
@@ -184,17 +242,7 @@ class BashAI:
             except KeyboardInterrupt:
                 print("\nUse 'exit' to quit")
             except Exception as e:
-                print(f"🚨 System Error: {str(e)}")
-
-    def _show_help(self):
-        """Show available commands for current shell"""
-        shell_type = "powershell" if "powershell" in os.environ.get('SHELL', '').lower() else (
-            "cmd" if self.is_windows else "bash"
-        )
-        print(f"\nAvailable {shell_type.upper()} commands:")
-        for cmd in self.shell_commands[f'{shell_type}_commands' if shell_type != 'powershell' else 'powershell']:
-            print(f"- {cmd}")
-        print("\nTry: 'list files', 'show processes', 'make python script'")
+                print(f"🚨 Error: {str(e)}")
 
 if __name__ == "__main__":
     ai = BashAI()
