@@ -23,7 +23,7 @@ class Spinner:
             sys.stdout.flush()
             time.sleep(0.1)
             i = (i + 1) % len(self.spinner_chars)
-        sys.stdout.write("\r" + " " * (len(message) + 10 + "\r")
+        sys.stdout.write("\r" + " " * (len(message) + 10) + "\r")
 
     def __enter__(self):
         self.stop_running = False
