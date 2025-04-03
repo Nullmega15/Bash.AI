@@ -23,7 +23,7 @@ class Spinner:
             sys.stdout.flush()
             time.sleep(0.1)
             i = (i + 1) % len(self.spinner_chars)
-        sys.stdout.write("\r" + " " * (len(message) + 10 + "\r")
+        sys.stdout.write("\r" + " " * (len(message) + 10) + "\r")  # Fixed parenthesis
 
     def __enter__(self):
         self.stop_running = False
@@ -57,7 +57,7 @@ class BashAI:
             json.dump(config, f)
         return config
 
-    def _generate_code(self, request: str) -> Tuple[str, str]:
+    def _generate_code(self, request: str) -> Tuple[str, str, str]:
         """Generate complete code files for any language"""
         with Spinner("Generating code"):
             response = self.client.messages.create(
@@ -67,10 +67,10 @@ class BashAI:
                     "role": "user",
                     "content": f"""Create complete, runnable code for: {request}
                     Requirements:
-                    1. Full implementation with all imports/dependencies
+                    1. Full implementation with all imports
                     2. Comments explaining key sections
-                    3. Proper file extension (.py, .js, etc.)
-                    4. No placeholder comments"""
+                    3. Proper file extension
+                    4. No placeholder code"""
                 }],
                 system="""Respond with:
                 <filename>filename.ext</filename>
@@ -120,7 +120,7 @@ class BashAI:
     def start_interactive(self):
         """Start interactive coding session"""
         print(f"\n💻 Bash.ai Multi-Language Coder (dir: {self.current_dir})")
-        print("Request any code: 'make python API', 'create react component', etc.\n")
+        print("Type: 'create python API', 'make react component', etc.\n")
         
         while True:
             try:
@@ -129,7 +129,7 @@ class BashAI:
                     break
 
                 # Code generation mode
-                if any(word in user_input.lower() for word in ['code', 'make', 'create', 'build']):
+                if any(word in user_input.lower() for word in ['make', 'create', 'build', 'code']):
                     filename, code, deps = self._generate_code(user_input)
                     
                     print(f"\n📄 Creating: {filename}")
@@ -137,10 +137,8 @@ class BashAI:
                         f.write(code)
                     print(f"✓ Successfully created {filename}")
                     
-                    # Install dependencies if any
                     self._install_dependencies(deps)
                     
-                    # Offer to run the code
                     if filename.endswith(('.py', '.js', '.sh')):
                         run = input(f"\nRun {filename}? [y/N] ").lower()
                         if run == 'y':
@@ -148,12 +146,11 @@ class BashAI:
                                 '.py': 'python',
                                 '.js': 'node',
                                 '.sh': 'bash'
-                            }.get(filename[filename.rfind('.'):], '')
+                            }.get(Path(filename).suffix, '')
                             if runner:
                                 print(f"\n🚀 Executing: {runner} {filename}")
                                 output, _ = self._execute_command(f"{runner} {filename}")
                                 print(output)
-                    
                     continue
 
                 # Command execution mode
@@ -164,11 +161,8 @@ class BashAI:
                         "role": "user", 
                         "content": f"Request: {user_input}\nCurrent dir: {self.current_dir}"
                     }],
-                    system="""Respond with:
-                    1. For coding requests: <filename> and <code>
-                    2. For commands: <execute>command</execute>"""
+                    system="You are Bash.ai. Respond with <execute>command</execute> for actions"
                 )
-
                 ai_response = response.content[0].text
                 print(ai_response)
 
