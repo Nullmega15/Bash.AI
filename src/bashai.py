@@ -47,7 +47,7 @@ class BashAI:
         if CONFIG_PATH.exists():
             with open(CONFIG_PATH) as f:
                 return json.load(f)
-        
+
         print("┌──────────────────────────────────────────────┐")
         print("│          Bash.ai First-Time Setup            │")
         print("└──────────────────────────────────────────────┘")
@@ -59,7 +59,7 @@ class BashAI:
 
     def _generate_code(self, request: str) -> Tuple[str, str]:
         """Generate complete code files for any language"""
-        with Spinner("Generating code"):
+        with Spinner():  # Removed the argument "Generating code"
             response = self.client.messages.create(
                 model="claude-3-sonnet-20240229",
                 max_tokens=4000,
@@ -91,7 +91,7 @@ class BashAI:
         """Install required packages"""
         if not deps:
             return
-            
+
         print(f"📦 Installing dependencies: {deps}")
         for manager in ['pip', 'npm', 'cargo']:
             if manager in deps.lower():
@@ -121,7 +121,7 @@ class BashAI:
         """Start interactive coding session"""
         print(f"\n💻 Bash.ai Multi-Language Coder (dir: {self.current_dir})")
         print("Request any code: 'make python API', 'create react component', etc.\n")
-        
+
         while True:
             try:
                 user_input = input("bash.ai> ").strip()
@@ -131,15 +131,15 @@ class BashAI:
                 # Code generation mode
                 if any(word in user_input.lower() for word in ['code', 'make', 'create', 'build']):
                     filename, code, deps = self._generate_code(user_input)
-                    
+
                     print(f"\n📄 Creating: {filename}")
                     with open(filename, 'w') as f:
                         f.write(code)
                     print(f"✓ Successfully created {filename}")
-                    
+
                     # Install dependencies if any
                     self._install_dependencies(deps)
-                    
+
                     # Offer to run the code
                     if filename.endswith(('.py', '.js', '.sh')):
                         run = input(f"\nRun {filename}? [y/N] ").lower()
@@ -153,7 +153,7 @@ class BashAI:
                                 print(f"\n🚀 Executing: {runner} {filename}")
                                 output, _ = self._execute_command(f"{runner} {filename}")
                                 print(output)
-                    
+
                     continue
 
                 # Command execution mode
