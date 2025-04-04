@@ -7,6 +7,7 @@ from typing import Tuple, Dict
 from threading import Thread
 import sys
 import time
+import readline
 
 CONFIG_PATH = Path.home() / ".bashai_config.json"
 
@@ -59,7 +60,7 @@ class BashAI:
 
     def _generate_code(self, request: str) -> Tuple[str, str]:
         """Generate complete code files for any language"""
-        with Spinner():  # Removed the argument "Generating code"
+        with Spinner():
             response = self.client.messages.create(
                 model="claude-3-sonnet-20240229",
                 max_tokens=4000,
@@ -117,6 +118,20 @@ class BashAI:
             except subprocess.CalledProcessError as e:
                 return (f"✗ Error: {e.stderr}", False)
 
+    def _predictive_typing(self, text: str) -> str:
+        """Predict the next part of the user's command"""
+        response = self.client.messages.create(
+            model="claude-3-haiku-20240307",
+            max_tokens=50,
+            messages=[{
+                "role": "user",
+                "content": f"Predict the next part of this command: {text}"
+            }],
+            system="""Respond with the next part of the command"""
+        )
+        prediction = response.content[0].text.strip()
+        return prediction
+
     def start_interactive(self):
         """Start interactive coding session"""
         print(f"\n💻 Bash.ai Multi-Language Coder (dir: {self.current_dir})")
@@ -125,8 +140,17 @@ class BashAI:
         while True:
             try:
                 user_input = input("bash.ai> ").strip()
+                if not user_input.startswith("bash.ai"):
+                    print("Command must start with 'bash.ai'")
+                    continue
+
+                user_input = user_input[len("bash.ai"):].strip()
                 if user_input.lower() in ['exit', 'quit']:
                     break
+
+                # Predictive typing
+                prediction = self._predictive_typing(user_input)
+                print(f"Suggestion: {prediction}")
 
                 # Code generation mode
                 if any(word in user_input.lower() for word in ['code', 'make', 'create', 'build']):
