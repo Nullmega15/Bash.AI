@@ -61,7 +61,7 @@ class BashAI:
         """Generate complete code files for any language"""
         with Spinner():
             response = self.client.messages.create(
-                model="claude-3.5-haiku",  # Updated to Claude 3.5 Haiku
+                model="claude-3-5-haiku-20241022",  # Updated to the new model
                 max_tokens=4000,
                 messages=[{
                     "role": "user",
@@ -166,7 +166,7 @@ class BashAI:
 
                 # Command execution mode
                 response = self.client.messages.create(
-                    model="claude-3.5-haiku",  # Updated to Claude 3.5 Haiku
+                    model="claude-3-5-haiku-20241022",  # Updated to the new model
                     max_tokens=1000,
                     messages=[{
                         "role": "user", 
