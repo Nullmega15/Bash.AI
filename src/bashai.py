@@ -58,111 +58,142 @@ class BashAI:
         return config
 
     def _generate_code(self, request: str) -> Tuple[str, str]:
-    """Generate complete code files for any language"""
-    with Spinner():
-        response = self.client.messages.create(
-            model="claude-3.5-haiku",  # Updated to Claude 3.5 Haiku
-            max_tokens=4000,
-            messages=[{
-                "role": "user",
-                "content": f"""Create complete, runnable code for: {request}
-                Requirements:
-                1. Full implementation with all imports/dependencies
-                2. Comments explaining key sections
-                3. Proper file extension (.py, .js, etc.)
-                4. No placeholder comments"""
-            }],
-            system="""Respond with:
-            <filename>filename.ext</filename>
-            <code>
-            // Complete code here
-            </code>
-            <dependencies>
-            package1 package2
-            </dependencies>"""
-        )
-        content = response.content[0].text
-        filename = content.split("<filename>")[1].split("</filename>")[0].strip()
-        code = content.split("<code>")[1].split("</code>")[0].strip()
-        deps = content.split("<dependencies>")[1].split("</dependencies>")[0].strip() if "<dependencies>" in content else ""
-        return filename, code, deps
-
-def start_interactive(self):
-    """Start interactive coding and terminal session"""
-    print(f"\n💻 Bash.ai Multi-Language Coder and Terminal Helper (dir: {self.current_dir})")
-    print("Request any code or terminal command: 'make python API', 'create react component', 'ls', 'cd', etc.\n")
-
-    while True:
-        try:
-            user_input = input("bash.ai> ").strip()
-            if user_input.lower() in ['exit', 'quit']:
-                break
-
-            # Recognize terminal commands
-            terminal_commands = ['ls', 'pwd', 'cd', 'cat', 'echo', 'mkdir', 'rm', 'touch', 'whoami', 'history']
-            if any(user_input.startswith(cmd) for cmd in terminal_commands):
-                print(f"Executing command: {user_input}")
-                output, success = self._execute_command(user_input)
-                print(output)
-                continue
-
-            # Code generation mode
-            if any(word in user_input.lower() for word in ['code', 'make', 'create', 'build']):
-                filename, code, deps = self._generate_code(user_input)
-
-                print(f"\n📄 Creating: {filename}")
-                with open(filename, 'w') as f:
-                    f.write(code)
-                print(f"✓ Successfully created {filename}")
-
-                # Install dependencies if any
-                self._install_dependencies(deps)
-
-                # Offer to run the code
-                if filename.endswith(('.py', '.js', '.sh')):
-                    run = input(f"\nRun {filename}? [y/N] ").lower()
-                    if run == 'y':
-                        runner = {
-                            '.py': 'python',
-                            '.js': 'node',
-                            '.sh': 'bash'
-                        }.get(filename[filename.rfind('.'):], '')
-                        if runner:
-                            print(f"\n🚀 Executing: {runner} {filename}")
-                            output, _ = self._execute_command(f"{runner} {filename}")
-                            print(output)
-
-                continue
-
-            # Command execution mode
+        """Generate complete code files for any language"""
+        with Spinner():
             response = self.client.messages.create(
                 model="claude-3.5-haiku",  # Updated to Claude 3.5 Haiku
-                max_tokens=1000,
+                max_tokens=4000,
                 messages=[{
-                    "role": "user", 
-                    "content": f"Request: {user_input}\nCurrent dir: {self.current_dir}"
+                    "role": "user",
+                    "content": f"""Create complete, runnable code for: {request}
+                    Requirements:
+                    1. Full implementation with all imports/dependencies
+                    2. Comments explaining key sections
+                    3. Proper file extension (.py, .js, etc.)
+                    4. No placeholder comments"""
                 }],
                 system="""Respond with:
-                1. For coding requests: <filename> and <code>
-                2. For commands: <execute>command</execute>"""
+                <filename>filename.ext</filename>
+                <code>
+                // Complete code here
+                </code>
+                <dependencies>
+                package1 package2
+                </dependencies>"""
             )
+            content = response.content[0].text
+            filename = content.split("<filename>")[1].split("</filename>")[0].strip()
+            code = content.split("<code>")[1].split("</code>")[0].strip()
+            deps = content.split("<dependencies>")[1].split("</dependencies>")[0].strip() if "<dependencies>" in content else ""
+            return filename, code, deps
 
-            ai_response = response.content[0].text
-            print(ai_response)
+    def _install_dependencies(self, deps: str):
+        """Install required packages"""
+        if not deps:
+            return
 
-            # Extract and execute command
-            if "<execute>" in ai_response and "</execute>" in ai_response:
-                command = ai_response.split("<execute>")[1].split("</execute>")[0].strip()
-                print(f"Executing command: {command}")
-                output, success = self._execute_command(command)
+        print(f"📦 Installing dependencies: {deps}")
+        for manager in ['pip', 'npm', 'cargo']:
+            if manager in deps.lower():
+                cmd = f"{manager} install {deps}"
+                output, success = self._execute_command(cmd)
                 print(output)
-            else:
+                if not success:
+                    print(f"⚠️ Failed to install some dependencies")
+
+    def _execute_command(self, cmd: str) -> Tuple[str, bool]:
+        """Execute a command with proper shell handling"""
+        with Spinner():
+            try:
+                result = subprocess.run(
+                    cmd,
+                    shell=True,
+                    check=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True
+                )
+                return (result.stdout or "✓ Done", True)
+            except subprocess.CalledProcessError as e:
+                return (f"✗ Error: {e.stderr}", False)
+
+    def start_interactive(self):
+        """Start interactive coding and terminal session"""
+        print(f"\n💻 Bash.ai Multi-Language Coder and Terminal Helper (dir: {self.current_dir})")
+        print("Request any code or terminal command: 'make python API', 'create react component', 'ls', 'cd', etc.\n")
+
+        while True:
+            try:
+                user_input = input("bash.ai> ").strip()
+                if user_input.lower() in ['exit', 'quit']:
+                    break
+
+                # Recognize terminal commands
+                terminal_commands = ['ls', 'pwd', 'cd', 'cat', 'echo', 'mkdir', 'rm', 'touch', 'whoami', 'history']
+                if any(user_input.startswith(cmd) for cmd in terminal_commands):
+                    print(f"Executing command: {user_input}")
+                    output, success = self._execute_command(user_input)
+                    print(output)
+                    continue
+
+                # Code generation mode
+                if any(word in user_input.lower() for word in ['code', 'make', 'create', 'build']):
+                    filename, code, deps = self._generate_code(user_input)
+
+                    print(f"\n📄 Creating: {filename}")
+                    with open(filename, 'w') as f:
+                        f.write(code)
+                    print(f"✓ Successfully created {filename}")
+
+                    # Install dependencies if any
+                    self._install_dependencies(deps)
+
+                    # Offer to run the code
+                    if filename.endswith(('.py', '.js', '.sh')):
+                        run = input(f"\nRun {filename}? [y/N] ").lower()
+                        if run == 'y':
+                            runner = {
+                                '.py': 'python',
+                                '.js': 'node',
+                                '.sh': 'bash'
+                            }.get(filename[filename.rfind('.'):], '')
+                            if runner:
+                                print(f"\n🚀 Executing: {runner} {filename}")
+                                output, _ = self._execute_command(f"{runner} {filename}")
+                                print(output)
+
+                    continue
+
+                # Command execution mode
+                response = self.client.messages.create(
+                    model="claude-3.5-haiku",  # Updated to Claude 3.5 Haiku
+                    max_tokens=1000,
+                    messages=[{
+                        "role": "user", 
+                        "content": f"Request: {user_input}\nCurrent dir: {self.current_dir}"
+                    }],
+                    system="""Respond with:
+                    1. For coding requests: <filename> and <code>
+                    2. For commands: <execute>command</execute>"""
+                )
+
+                ai_response = response.content[0].text
                 print(ai_response)
 
-        except KeyboardInterrupt:
-            print("\nUse 'exit' to quit")
-        except Exception as e:
-            print(f"🚨 Error: {str(e)}")
+                # Extract and execute command
+                if "<execute>" in ai_response and "</execute>" in ai_response:
+                    command = ai_response.split("<execute>")[1].split("</execute>")[0].strip()
+                    print(f"Executing command: {command}")
+                    output, success = self._execute_command(command)
+                    print(output)
+                else:
+                    print(ai_response)
+
+            except KeyboardInterrupt:
+                print("\nUse 'exit' to quit")
+            except Exception as e:
+                print(f"🚨 Error: {str(e)}")
+
 if __name__ == "__main__":
     ai = BashAI()
     ai.start_interactive()
