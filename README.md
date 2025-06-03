@@ -50,7 +50,7 @@ On first run, you'll be prompted to configure the AI server URL. You will need t
 sudo apt update && sudo apt install -y python3 python3-pip git
 
 # 2. Clone repository
-git clone https://github.com/yourusername/bash.ai.git
+git clone https://github.com/Nullmega15/bash.ai.git
 cd bash.ai
 
 # 3. Install client dependencies
@@ -66,7 +66,7 @@ python3 src/bashai.py
 # Download from python.org or use winget: winget install Python.Python.3
 
 # 2. Clone repository
-git clone https://github.com/yourusername/bash.ai.git
+git clone https://github.com/Nullmega15/bash.ai.git
 cd bash.ai
 
 # 3. Install client dependencies
