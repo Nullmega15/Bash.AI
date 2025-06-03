@@ -1,2 +1,3 @@
-anthropic>=0.3.0
+# Bash.ai Client Dependencies
+requests>=2.31.0
 pyreadline3>=3.4.1; sys_platform == 'win32'
