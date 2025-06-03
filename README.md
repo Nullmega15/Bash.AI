@@ -1,69 +1,120 @@
-Bash.ai 🤖💻AI-powered terminal assistant that leverages a remote DeepSeek Coder model. Natural language to code generation and command execution across Windows, Linux, and macOS.🌟 Features🤖 Remote AI Model: Connects to a server running DeepSeek Coder for powerful AI capabilities.🗣️ Natural Language: "create a backup script" → Complete working code.⚡ Instant Commands: "list python files" → find . -name "*.py".🔄 Cross-Platform: Windows PowerShell, Linux/macOS bash support.💾 Code Generation: Python, JavaScript, Bash, PowerShell scripts.🛡️ Safe Mode: Prevents dangerous commands.📚 Smart Context: Understands your OS and current directory.🚀 Quick Start1. Clone Repositorygit clone [https://github.com/yourusername/bash.ai.git](https://github.com/yourusername/bash.ai.git)
+# Bash.ai 🤖💻
+
+AI-powered terminal assistant that leverages a remote DeepSeek Coder model hosted privately. Natural language to code generation and command execution across Windows, Linux, and macOS.
+
+## 🌟 Features
+
+- 🤖 **Remote AI Model**: Connects to a powerful AI server hosted by the Bash.ai team
+- 🗣️ **Natural Language**: "create a backup script" → Complete working code
+- ⚡ **Instant Commands**: "list python files" → `find . -name "*.py"`
+- 🔄 **Cross-Platform**: Windows PowerShell, Linux/macOS bash support
+- 💾 **Code Generation**: Python, JavaScript, Bash, PowerShell scripts
+- 🛡️ **Safe Mode**: Prevents dangerous commands
+- 📚 **Smart Context**: Understands your OS and current directory
+
+## 🚀 Quick Start (For End Users)
+
+### 1. Clone Repository
+```bash
+git clone https://github.com/yourusername/bash.ai.git
 cd bash.ai
-2. Install Server Dependencies (First Time)This is for the AI server that runs the DeepSeek Coder model.# Ensure you have Python 3 and pip installed
-# Install server-side Python dependencies
-pip install -r server-requirements.txt
-Note: Depending on your system and GPU, you might need specific torch versions (e.g., pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118 for CUDA 11.8).3. Start AI ServerThe server must be running for the Bash.ai client to work.# Linux/macOS
-./start_server.sh
+```
 
-# Windows (in PowerShell)
-.\start_server.bat
+### 2. Install Client Dependencies & Setup
 
-# Or manually
-python server.py
-The server will typically run on http://localhost:8000.4. Install Client Dependencies & Setup# Linux/macOS
+**Linux/macOS:**
+```bash
 ./install_linux.sh
+```
 
-# Windows (in PowerShell, run as Administrator if needed for PATH changes)
+**Windows (PowerShell - run as Administrator if needed for PATH changes):**
+```powershell
 .\install_windows.ps1
-Follow the prompts. These scripts will install client dependencies and add bashai to your system's PATH. You may need to restart your terminal after installation for PATH changes to take effect.5. Run Bash.ai# From any terminal
+```
+
+Follow the prompts. These scripts will install client dependencies and add `bashai` to your system's PATH. You may need to restart your terminal after installation for PATH changes to take effect.
+
+### 3. Run Bash.ai
+```bash
+# From any terminal
 bashai
-On first run, you'll be prompted to configure the server URL and other settings.📋 Manual InstallationLinux (Ubuntu/Debian)# 1. Install dependencies
+```
+
+On first run, you'll be prompted to configure the AI server URL. You will need the URL of the Bash.ai AI server provided by the service administrator.
+
+## 📋 Manual Client Installation (For End Users)
+
+### Linux (Ubuntu/Debian)
+```bash
+# 1. Install dependencies
 sudo apt update && sudo apt install -y python3 python3-pip git
 
 # 2. Clone repository
-git clone [https://github.com/yourusername/bash.ai.git](https://github.com/yourusername/bash.ai.git)
+git clone https://github.com/yourusername/bash.ai.git
 cd bash.ai
 
-# 3. Install server dependencies (for running the AI model)
-pip3 install -r server-requirements.txt --user
-
-# 4. Install client dependencies
+# 3. Install client dependencies
 pip3 install -r requirements.txt --user
 
-# 5. Start server
-python3 server.py & # Run in background
-
-# 6. Run client
+# 4. Run client
 python3 src/bashai.py
-Windows (PowerShell)# 1. Install Python (if needed)
+```
+
+### Windows (PowerShell)
+```powershell
+# 1. Install Python (if needed)
 # Download from python.org or use winget: winget install Python.Python.3
 
 # 2. Clone repository
-git clone [https://github.com/yourusername/bash.ai.git](https://github.com/yourusername/bash.ai.git)
+git clone https://github.com/yourusername/bash.ai.git
 cd bash.ai
 
-# 3. Install server dependencies
-python -m pip install -r server-requirements.txt
-
-# 4. Install client dependencies
+# 3. Install client dependencies
 python -m pip install -r requirements.txt
 
-# 5. Start server
-Start-Process python -ArgumentList "server.py" # Run in background
-
-# 6. Run client
+# 4. Run client
 python src\bashai.py
-macOS# 1. Install Homebrew (if needed)
-/bin/bash -c "$(curl -fsSL [https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh](https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh))"
+```
+
+### macOS
+```bash
+# 1. Install Homebrew (if needed)
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
 # 2. Install Python
 brew install python git
 
 # 3. Follow Linux instructions from step 2 onwards
-🔧 ConfigurationFirst Run SetupOn first run of bashai, you'll be prompted to configure:Server URL: Default http://localhost:8000. Change this if your AI server is running elsewhere.Auto-execute: Whether commands suggested by AI run automatically (default: False).Safe mode: Blocks potentially dangerous commands (default: True).Configuration is saved to:Linux/macOS: ~/.bashai_config.jsonWindows: %USERPROFILE%\.bashai_config.jsonYou can also force the configuration prompt at any time:bashai --configure
-To view current configuration:bashai --config
-💡 Usage ExamplesTerminal Commandsbash.ai> list all python files
+```
+
+## 🔧 Configuration (For End Users)
+
+### First Run Setup
+On first run of `bashai`, you'll be prompted to configure:
+
+- **Server URL**: Crucial! Enter the URL of the Bash.ai AI server (e.g., `https://your-bashai-server.com:8000`)
+- **Auto-execute**: Whether commands suggested by AI run automatically (default: False)
+- **Safe mode**: Blocks potentially dangerous commands (default: True)
+
+Configuration is saved to:
+- **Linux/macOS**: `~/.bashai_config.json`
+- **Windows**: `%USERPROFILE%\.bashai_config.json`
+
+You can also force the configuration prompt at any time:
+```bash
+bashai --configure
+```
+
+To view current configuration:
+```bash
+bashai --config
+```
+
+## 💡 Usage Examples
+
+### Terminal Commands
+```bash
+bash.ai> list all python files
 # AI suggests and executes: find . -name "*.py" -type f
 
 bash.ai> show disk usage sorted by size  
@@ -71,7 +122,11 @@ bash.ai> show disk usage sorted by size
 
 bash.ai> find large files over 100MB
 # AI suggests and executes: find . -size +100M -type f -exec ls -lh {} \;
-Code Generationbash.ai> make a python web server
+```
+
+### Code Generation
+```bash
+bash.ai> make a python web server
 # AI creates: server.py with complete Flask/FastAPI code
 
 bash.ai> create backup script for my home directory
@@ -79,7 +134,11 @@ bash.ai> create backup script for my home directory
 
 bash.ai> build a todo app in javascript
 # AI creates: todo.html with complete HTML/CSS/JS
-Cross-Platform Commands# Works on all platforms with appropriate syntax
+```
+
+### Cross-Platform Commands
+```bash
+# Works on all platforms with appropriate syntax
 bash.ai> copy all images to backup folder
 # Linux: cp *.{jpg,png,gif} backup/
 # Windows: copy *.jpg backup\ && copy *.png backup\
@@ -87,30 +146,139 @@ bash.ai> copy all images to backup folder
 bash.ai> check running processes
 # Linux: ps aux
 # Windows: Get-Process
-🖥️ Server Setup DetailsThe AI server runs DeepSeek Coder locally (or on a designated machine) for privacy and offline use.System Requirements for ServerRAM: 8GB minimum, 16GB recommended (for the model)Storage: ~15GB free space for model downloadGPU: Optional but highly recommended for performance (NVIDIA GPUs with CUDA support, or Apple Silicon with MPS). If no GPU, CPU inference will be much slower.GPU Support (Optional but Recommended)For NVIDIA GPUs with CUDA, ensure you have the correct CUDA toolkit installed and then install PyTorch with CUDA support:# Example for CUDA 11.8 (check PyTorch website for latest instructions)
-pip install torch torchvision torchaudio --index-url [https://download.pytorch.org/whl/cu118](https://download.pytorch.org/whl/cu118)
-For Apple Silicon (M1/M2/M3 chips), PyTorch can leverage MPS:pip install torch torchvision torchaudio --index-url [https://download.pytorch.org/whl/cpu](https://download.pytorch.org/whl/cpu) # MPS is usually included with CPU wheel
-Verify GPU detection:python -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()}'); print(f'MPS Available: {torch.backends.mps.is_available()}')"
-🛠️ TroubleshootingCommon Issues"Model not found" Error on Server StartupThis usually means the transformers library couldn't download the model.# Clear Hugging Face model cache and retry
+```
+
+## 🖥️ Server Setup (For Bash.ai Service Providers)
+
+This section is for those who are deploying and managing the private Bash.ai AI server.
+
+### Server Files
+The server-side code is located in `server.py`, `server-requirements.txt`, `start_server.sh`, and `start_server.bat`. These files are not intended for end-user distribution or local setup. They should be deployed on your private server infrastructure.
+
+### System Requirements for Server
+- **RAM**: 8GB minimum, 16GB recommended (for the DeepSeek Coder model)
+- **Storage**: ~15GB free space for model download
+- **GPU**: Highly recommended for performance (NVIDIA GPUs with CUDA support, or Apple Silicon with MPS). CPU inference will be significantly slower.
+
+### Server Deployment Steps (Overview)
+
+1. **Obtain Server Files**: Securely transfer `server.py`, `server-requirements.txt`, `start_server.sh`, and `start_server.bat` to your private server.
+
+2. **Install Server Dependencies**:
+   ```bash
+   pip install -r server-requirements.txt
+   ```
+   > **Note**: Ensure torch is installed with appropriate CUDA/MPS support if using a GPU. Refer to the [PyTorch website](https://pytorch.org) for specific installation commands.
+
+3. **Start the AI Server**:
+   ```bash
+   # On Linux/macOS server
+   ./start_server.sh
+   
+   # On Windows server (in PowerShell)
+   .\start_server.bat
+   ```
+
+4. **Ensure Continuous Operation**: Keep the server running continuously (e.g., using `nohup` or a process manager like `systemd` for Linux). The server will typically listen on `http://0.0.0.0:8000`.
+
+5. **Configure Network Access**: Ensure your server's firewall and network settings allow incoming connections to the chosen port (default 8000) from your clients. If exposing to the internet, use HTTPS and appropriate security measures.
+
+6. **Distribute Server URL**: Provide the public URL of your running AI server to your Bash.ai client users.
+
+### GPU Support (Optional but Recommended for Server)
+
+**For NVIDIA GPUs with CUDA**, ensure you have the correct CUDA toolkit installed and then install PyTorch with CUDA support:
+```bash
+# Example for CUDA 11.8 (check PyTorch website for latest instructions)
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+```
+
+**For Apple Silicon (M1/M2/M3 chips)**, PyTorch can leverage MPS:
+```bash
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+# MPS is usually included with CPU wheel
+```
+
+Verify GPU detection on the server:
+```bash
+python -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()}'); print(f'MPS Available: {torch.backends.mps.is_available()}')"
+```
+
+## 🛠️ Troubleshooting (Server-Side)
+
+### Common Issues
+
+#### "Model not found" Error on Server Startup
+This usually means the transformers library couldn't download the model or there's a compatibility issue.
+
+```bash
+# Clear Hugging Face model cache and retry
 # Linux/macOS:
 rm -rf ~/.cache/huggingface/
+
 # Windows:
 Remove-Item -Recurse -Force $env:USERPROFILE\.cache\huggingface\
 
 # Then restart the server
 python server.py
-Connection Refused / Cannot Connect to ServerIs the server running? Open a separate terminal and run python server.py (or start_server.sh/start_server.bat).Is the server URL correct? Check ~/.bashai_config.json or run bashai --config. Ensure the client's server_url matches where your server is actually listening.Firewall? Ensure your firewall isn't blocking port 8000 (or whatever port you're using).Network issues? If the server is on a different machine, ensure network connectivity.Permission Denied (Linux/macOS)# Make installation scripts executable
-chmod +x install_linux.sh start_server.sh
-# If you encounter permission issues when running bashai after installation,
-# it might be due to /usr/local/bin not being in your PATH, or permissions.
-# Try running `python3 src/bashai.py` directly.
-Python Not Found (Windows)Ensure Python 3 is installed and added to your system's PATH. You might need to reinstall Python and select the "Add Python to PATH" option during installation.Performance OptimizationServer PerformanceUse GPU: Always prioritize running the server on a machine with a compatible GPU (NVIDIA with CUDA or Apple Silicon with MPS).Model Precision: The server.py uses torch.float16 or torch.bfloat16 by default for faster inference.Reduce max_tokens: In bashai.py, you can reduce the max_tokens sent in the payload to the server for shorter, faster responses (e.g., max_tokens=500).Client PerformanceDisable Auto-Execute: If auto_execute is True, the client will run commands without confirmation, which is faster but less safe. You can change this in ~/.bashai_config.json or via bashai --configure.🏗️ Architecture┌─────────────────┐    HTTP/JSON    ┌──────────────────┐
+```
+
+#### Server Connection Issues
+- **Is the server process running?** Check your server's process list
+- **Firewall?** Ensure your server's firewall isn't blocking the chosen port (e.g., 8000)
+- **Network configuration?** Verify network routes and public IP/DNS if clients are external
+
+### Performance Optimization (Server-Side)
+- **Use GPU**: Always prioritize running the server on a machine with a compatible GPU
+- **Model Precision**: The `server.py` uses `torch.float16` or `torch.bfloat16` by default for faster inference
+- **Resource Allocation**: Ensure the server has sufficient RAM and CPU cores dedicated to the AI process
+
+## 🏗️ Architecture
+
+```
+┌─────────────────┐    HTTP/JSON    ┌──────────────────┐
 │   Bash.ai       │◄───────────────►│   AI Server      │
 │   Client        │    Requests     │   (DeepSeek)     │
+│  (Public GitHub)│                 │  (Private Server)│
 │                 │                 │                  │
 │ • Terminal UI   │                 │ • Model Loading  │
-│ • Text Generation│
-│ • GPU Support    │
-│ • FastAPI        │
+│ • Command Exec  │                 │ • Text Generation│
+│ • File Creation │                 │ • GPU Support    │
+│ • Cross-platform│                 │ • FastAPI        │
 └─────────────────┘                 └──────────────────┘
-ComponentsClient (src/bashai.py): Terminal interface, command execution, file creation.Server (server.py): AI model hosting, API endpoints for chat and health checks.Setup Scripts (install_linux.sh, install_windows.ps1): Automate client installation.Start Scripts (start_server.sh, start_server.bat): Automate server startup.Configuration (.bashai_config.json): JSON-based configuration management.📊 Model InformationDeepSeek Coder 6.7B InstructSize: ~13GB downloadContext: 16K tokensLanguages: Python, JavaScript, Bash, PowerShell, C++, Java, etc.Specialization: Code generation, debugging, explanation🔒 Privacy & SecurityLocal/Self-Hosted Processing: The AI model runs on your machine (or a machine you control), ensuring your queries and data do not leave your local network unless you configure the client to connect to a remote, external server.No Data Transmission: With a local server setup, your code and commands never leave your system.Safe Mode: The client includes a "safe mode" that blocks dangerous commands by default, requiring user confirmation.Open Source: Full code transparency allows you to inspect how Bash.ai works.📜 LicenseMIT License - see LICENSE file for details.🙏 AcknowledgmentsDeepSeek for the excellent code modelHugging Face for model hosting and transformersFastAPI for the server frameworkMade with ❤️ by the Bash.ai team
+```
+
+### Components
+- **Client** (`src/bashai.py`): Publicly available terminal interface, handles user input, command execution, and file creation. Communicates with the remote AI server.
+- **Server** (`server.py`): Private code, deployed on a dedicated server. Hosts the AI model and provides API endpoints for text generation.
+- **Setup Scripts** (`install_linux.sh`, `install_windows.ps1`): Automate client installation for end-users.
+- **Start Scripts** (`start_server.sh`, `start_server.bat`): For service providers to start the AI server.
+- **Configuration** (`.bashai_config.json`): Stores client-side settings, including the remote server URL.
+
+## 📊 Model Information
+
+**DeepSeek Coder 6.7B Instruct**
+- **Size**: ~13GB download
+- **Context**: 16K tokens
+- **Languages**: Python, JavaScript, Bash, PowerShell, C++, Java, etc.
+- **Specialization**: Code generation, debugging, explanation
+
+## 🔒 Privacy & Security
+
+- **Remote Processing**: The AI model runs on a server you control, ensuring your users' queries are processed in an environment you manage
+- **Safe Mode**: The client includes a "safe mode" that blocks dangerous commands by default, requiring user confirmation
+- **Open Source Client**: The client-side code is fully transparent, allowing users to inspect how Bash.ai works on their machine
+
+## 📜 License
+
+MIT License - see [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- [DeepSeek](https://deepseek.com) for the excellent code model
+- [Hugging Face](https://huggingface.co) for model hosting and transformers
+- [FastAPI](https://fastapi.tiangolo.com) for the server framework
+
+---
+
+Made with ❤️ by the Bash.ai team
