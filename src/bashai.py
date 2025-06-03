@@ -16,6 +16,7 @@ from typing import Tuple, Dict, Optional, List
 from threading import Thread
 import time
 import signal
+import re # Import regex module for parsing markdown code blocks
 
 # Cross-platform imports for readline (for command history and editing)
 try:
@@ -131,7 +132,7 @@ class BashAI:
         # Check server connection status on startup
         if not self._check_server_connection():
             print(f"{Colors.YELLOW}⚠️  Warning: Cannot connect to AI server at {self.server_url}{Colors.END}")
-            print(f"{Colors.YELLOW}   Make sure the server is running: python server.py{Colors.END}")
+            print(f"{Colors.YELLOW}   Make sure the server is running and accessible.{Colors.END}")
             print(f"{Colors.YELLOW}   You can configure the server URL using 'bashai --configure' or by editing {CONFIG_PATH}{Colors.END}")
 
     def _signal_handler(self, signum, frame):
@@ -245,7 +246,7 @@ class BashAI:
                     return f"Server error: {response.status_code} - {error_detail}", False
                     
         except requests.exceptions.ConnectionError:
-            return f"Connection error: Could not connect to AI server at {self.server_url}. Is it running?", False
+            return f"Connection error: Could not connect to AI server at {self.server_url}. Is it running and accessible?", False
         except requests.exceptions.Timeout:
             return f"Timeout error: AI server at {self.server_url} took too long to respond.", False
         except requests.RequestException as e:
@@ -330,16 +331,14 @@ class BashAI:
 Current environment: {os_info['system']} {os_info['release']} ({os_info['machine']})
 Current directory: {os_info['current_dir']}
 
-Guidelines:
-1. For terminal commands: Provide the exact command to run. Do not include explanations.
-2. For code requests: Generate complete, runnable code with proper syntax. Do not include explanations.
-3. Always consider the current OS when suggesting commands or generating code.
-4. If asked to create files, provide the complete file content.
+Guidelines for your responses:
+1.  **For Terminal Commands**: If the user asks for a command to execute, **ONLY** provide the exact command wrapped in `<execute>` tags. Do NOT include any other text, explanations, or markdown code blocks around it.
+    Example: `<execute>ls -l</execute>`
+    Example (Windows): `<execute>dir /w</execute>`
+2.  **For Code Generation**: If the user asks for code (e.g., a script, a program), provide the complete, runnable code inside `<filename>name.ext</filename><code>full_code_here</code>` tags. Do NOT include explanations outside these tags.
+3.  **For Explanations/Conversational Responses**: If the request is not for a command or code, just provide the explanation text directly. Do NOT use any special tags.
 
-Respond in one of these strict formats:
-- For commands: <execute>command_here</execute>
-- For code: <filename>name.ext</filename><code>full_code_here</code>
-- For explanations or conversational responses: Just provide the explanation text directly. Do not use any tags.
+Strictly adhere to these formats. Do not deviate.
 
 Current OS-specific command syntax:
 - Windows: Use PowerShell/CMD syntax (e.g., dir, copy, del, Get-Process).
@@ -348,6 +347,7 @@ Current OS-specific command syntax:
     def _parse_ai_response(self, response: str) -> Dict:
         """
         Parses the AI's response to identify if it's a command, code, or an explanation.
+        Prioritizes <execute> tags, then markdown code blocks for commands, then code tags.
         """
         result = {
             'type': 'explanation',
@@ -357,17 +357,29 @@ Current OS-specific command syntax:
             'code': None
         }
         
-        # Check for command tag
+        # --- 1. Check for <execute> tags (Highest Priority for commands) ---
         if '<execute>' in response and '</execute>' in response:
             start = response.find('<execute>') + len('<execute>')
             end = response.find('</execute>')
-            if start < end: # Ensure tags are correctly ordered
+            if start < end:
                 result['type'] = 'command'
                 result['command'] = response[start:end].strip()
-                result['content'] = response # Keep full response for debugging/display if needed
-            
-        # Check for code tags
-        elif '<filename>' in response and '<code>' in response:
+                return result # Return immediately if explicit execute tag found
+
+        # --- 2. Check for Markdown Code Blocks (Fallback for commands) ---
+        # This regex looks for ```[language]\n[content]\n```
+        # It's non-greedy (.*?) and uses re.DOTALL to match across newlines
+        markdown_code_block_pattern = re.compile(r'```(?:\w+)?\n(.*?)\n```', re.DOTALL)
+        match = markdown_code_block_pattern.search(response)
+        if match:
+            extracted_command = match.group(1).strip()
+            # If a markdown code block is found, treat it as a command
+            result['type'] = 'command'
+            result['command'] = extracted_command
+            return result # Return if a markdown code block is found and treated as command
+
+        # --- 3. Check for <filename> and <code> tags (for code generation) ---
+        if '<filename>' in response and '<code>' in response:
             filename_start = response.find('<filename>') + len('<filename>')
             filename_end = response.find('</filename>')
             code_start = response.find('<code>') + len('<code>')
@@ -377,8 +389,12 @@ Current OS-specific command syntax:
                 result['type'] = 'code'
                 result['filename'] = response[filename_start:filename_end].strip()
                 result['code'] = response[code_start:code_end].strip()
-                result['content'] = response # Keep full response for debugging/display if needed
-            
+                # Keep full response as content for debugging/display if needed,
+                # but the primary parsed elements are filename and code.
+                return result
+
+        # --- 4. Default to Explanation ---
+        # If none of the above formats are matched, it's a plain explanation.
         return result
 
     def _interactive_mode(self):
@@ -396,13 +412,8 @@ Current OS-specific command syntax:
                 # Construct the prompt for the user
                 prompt = f"{Colors.GREEN}bash.ai{Colors.END} {Colors.BLUE}{os.path.basename(self.current_dir)}{Colors.END}> "
                 
-                # Get user input using readline for history and editing if available
-                if readline:
-                    user_input = readline.get_line_buffer() # Get current buffer if any
-                    readline.set_history_length(self.config.get('max_history', 100))
-                    user_input = input(prompt).strip()
-                else:
-                    user_input = input(prompt).strip()
+                # Get user input. input() itself handles the readline integration if available.
+                user_input = input(prompt).strip()
                 
                 if not user_input:
                     continue # Skip empty input
