@@ -16,7 +16,7 @@ AI-powered terminal assistant that leverages a remote DeepSeek Coder model hoste
 
 ### 1. Clone Repository
 ```bash
-git clone https://github.com/yourusername/bash.ai.git
+git clone https://github.com/Nullmega15/bash.ai.git
 cd bash.ai
 ```
 
