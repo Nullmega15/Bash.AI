@@ -256,7 +256,8 @@ class BashAI:
 
     def _execute_command(self, cmd: str, show_command: bool = True) -> Tuple[str, bool]:
         """
-        Executes a system command. Includes a basic safety check.
+        Executes a system command safely. This function is for short-lived commands
+        where the full output is expected at once.
         """
         if show_command:
             print(f"{Colors.BLUE}Executing:{Colors.END} {cmd}")
@@ -397,6 +398,136 @@ Current OS-specific command syntax:
         # If none of the above formats are matched, it's a plain explanation.
         return result
 
+    def _read_output_stream(self, stream, output_list):
+        """
+        Helper function to read lines from a subprocess stream (stdout/stderr)
+        and print them in real-time, also collecting them into a list.
+        """
+        # Readline by readline to ensure real-time output
+        for line_bytes in iter(stream.readline, b''):
+            try:
+                line_str = line_bytes.decode(sys.stdout.encoding, errors='replace').strip()
+                output_list.append(line_str)
+                sys.stdout.write(line_str + '\n') # Add newline back for proper display
+                sys.stdout.flush()
+            except Exception as e:
+                # Log decoding errors but don't stop the process
+                sys.stderr.write(f"Error decoding stream: {e}\n")
+                sys.stderr.flush()
+        stream.close() # Ensure stream is closed when done
+
+    def _run_code_file(self, filename: str):
+        """
+        Attempts to run a generated code file based on its extension,
+        displaying output in real-time and allowing the user to stop execution.
+        """
+        runners = {
+            '.py': 'python',
+            '.js': 'node',
+            '.sh': 'bash',
+            '.ps1': 'powershell.exe -ExecutionPolicy Bypass -File' # Full command for PowerShell
+        }
+        
+        ext = os.path.splitext(filename)[1].lower()
+        runner_command_str = runners.get(ext)
+        
+        if not runner_command_str:
+            print(f"{Colors.YELLOW}Don't know how to run files with extension '{ext}'.{Colors.END}")
+            print(f"{Colors.YELLOW}You may need to run it manually.{Colors.END}")
+            return
+
+        # Split the runner command string into parts for subprocess.Popen
+        # This handles cases like 'powershell.exe -ExecutionPolicy Bypass -File' correctly
+        command_parts = runner_command_str.split() + [filename]
+
+        print(f"{Colors.BLUE}Running code: {' '.join(command_parts)}{Colors.END}")
+        print(f"{Colors.YELLOW}Output will be displayed below. To halt, type 'stop' and press Enter.{Colors.END}")
+
+        process = None
+        stdout_thread = None
+        stderr_thread = None
+
+        try:
+            # Start the subprocess
+            process = subprocess.Popen(
+                command_parts,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=False, # We will decode manually in the thread
+                bufsize=1, # Line-buffered output
+                universal_newlines=False, # We handle decoding
+                # Prevents a new console window from popping up on Windows
+                creationflags=subprocess.CREATE_NO_WINDOW if self.is_windows and hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+            )
+
+            # Lists to store output (optional, but good for debugging/post-processing)
+            stdout_output_lines = []
+            stderr_output_lines = []
+
+            # Start threads to read stdout and stderr concurrently
+            stdout_thread = Thread(target=self._read_output_stream, args=(process.stdout, stdout_output_lines), daemon=True)
+            stdout_thread.start()
+
+            stderr_thread = Thread(target=self._read_output_stream, args=(process.stderr, stderr_output_lines), daemon=True)
+            stderr_thread.start()
+
+            # Main thread waits for user input to stop or process to finish
+            while process.poll() is None: # While the child process is still running
+                try:
+                    # Prompt for user input to stop the process
+                    user_input = input(f"{Colors.CYAN} (Type 'stop' and press Enter to halt) > {Colors.END}").strip().lower()
+                    if user_input == 'stop':
+                        print(f"{Colors.YELLOW}Attempting to stop process...{Colors.END}")
+                        process.terminate() # Send SIGTERM (or equivalent on Windows)
+                        break # Exit the loop
+                except EOFError: # Catch Ctrl+D
+                    print(f"\n{Colors.YELLOW}EOF detected. Attempting to stop process...{Colors.END}")
+                    process.terminate()
+                    break
+                except KeyboardInterrupt: # Catch Ctrl+C
+                    print(f"\n{Colors.YELLOW}KeyboardInterrupt detected. Attempting to stop process...{Colors.END}")
+                    process.terminate()
+                    break
+                time.sleep(0.1) # Small delay to prevent busy-waiting
+
+        except FileNotFoundError:
+            print(f"{Colors.RED}Error: The runner program ('{command_parts[0]}') for '{ext}' files was not found. Make sure it's installed and in your PATH.{Colors.END}")
+            return
+        except Exception as e:
+            print(f"{Colors.RED}An unexpected error occurred while trying to run the code file: {str(e)}{Colors.END}")
+            if process and process.poll() is None: # If process is still running, try to terminate
+                process.terminate()
+            return
+        finally:
+            # Ensure the process is fully terminated and resources are cleaned up
+            if process:
+                try:
+                    # Wait for the process to terminate, with a timeout
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    print(f"{Colors.RED}Process did not terminate gracefully within timeout. Killing...{Colors.END}")
+                    process.kill() # Force kill if terminate fails
+                
+                # Ensure output reading threads are joined (wait for them to finish reading)
+                if stdout_thread and stdout_thread.is_alive():
+                    stdout_thread.join(timeout=1)
+                if stderr_thread and stderr_thread.is_alive():
+                    stderr_thread.join(timeout=1)
+
+                # Close pipes explicitly if they are not already closed by join
+                if process.stdout:
+                    process.stdout.close()
+                if process.stderr:
+                    process.stderr.close()
+
+        # Report final status
+        if process and process.returncode == 0:
+            print(f"\n{Colors.GREEN}✓ Code execution completed successfully.{Colors.END}")
+        elif process and process.returncode is not None: # Process finished with a non-zero exit code
+            print(f"\n{Colors.RED}Code execution finished with exit code {process.returncode}.{Colors.END}")
+        else: # Process was terminated by user or other means (returncode is None if killed)
+            print(f"\n{Colors.YELLOW}Code execution halted by user or external signal.{Colors.END}")
+
     def _interactive_mode(self):
         """
         Starts the interactive terminal session for Bash.ai.
@@ -531,63 +662,359 @@ Current OS-specific command syntax:
 
     def _run_code_file(self, filename: str):
         """
-        Attempts to run a generated code file based on its extension.
+        Attempts to run a generated code file based on its extension,
+        displaying output in real-time and allowing the user to stop execution.
         """
-        # Define runners for different file extensions
         runners = {
             '.py': 'python',
             '.js': 'node',
             '.sh': 'bash',
-            '.ps1': 'powershell -ExecutionPolicy Bypass -File' # PowerShell specific command
+            '.ps1': 'powershell.exe -ExecutionPolicy Bypass -File' # Full command for PowerShell
         }
         
-        ext = os.path.splitext(filename)[1].lower() # Get file extension and convert to lowercase
-        runner = runners.get(ext)
+        ext = os.path.splitext(filename)[1].lower()
+        runner_command_str = runners.get(ext)
         
-        if runner:
-            command = f"{runner} {filename}"
-            print(f"{Colors.BLUE}Attempting to run: {command}{Colors.END}")
-            output, success = self._execute_command(command, show_command=False) # Don't show command again
-            print(output)
-        else:
+        if not runner_command_str:
             print(f"{Colors.YELLOW}Don't know how to run files with extension '{ext}'.{Colors.END}")
             print(f"{Colors.YELLOW}You may need to run it manually.{Colors.END}")
+            return
 
-    def _show_help(self):
-        """
-        Displays help information about Bash.ai commands and usage examples.
-        """
-        help_text = f"""
-{Colors.BOLD}Bash.ai Commands:{Colors.END}
-  help                 - Show this help message.
-  exit, quit          - Exit the Bash.ai program.
-  clear               - Clear the terminal screen.
-  config              - Show current Bash.ai configuration.
-  cd <path>           - Change the current working directory.
+        # Split the runner command string into parts for subprocess.Popen
+        # This handles cases like 'powershell.exe -ExecutionPolicy Bypass -File' correctly
+        command_parts = runner_command_str.split() + [filename]
 
-{Colors.BOLD}Usage Examples (Natural Language Queries):{Colors.END}
-  {Colors.CYAN}list all python files in this directory{Colors.END}
-  {Colors.CYAN}create a backup script for my documents folder{Colors.END}
-  {Colors.CYAN}make a simple calculator in python{Colors.END}
-  {Colors.CYAN}show disk usage of my home directory{Colors.END}
-  {Colors.CYAN}find large files older than 30 days{Colors.END}
-  {Colors.CYAN}how do I install Node.js on Ubuntu?{Colors.END}
+        print(f"{Colors.BLUE}Running code: {' '.join(command_parts)}{Colors.END}")
+        print(f"{Colors.YELLOW}Output will be displayed below. To halt, type 'stop' and press Enter.{Colors.END}")
 
-{Colors.BOLD}Code Generation Examples:{Colors.END}
-  {Colors.CYAN}make a simple web server in python using Flask{Colors.END}
-  {Colors.CYAN}create a bash script to monitor CPU usage every 5 seconds{Colors.END}
-  {Colors.CYAN}build a simple todo app in javascript with HTML and CSS{Colors.END}
-"""
-        print(help_text)
+        process = None
+        stdout_thread = None
+        stderr_thread = None
 
-    def _show_config(self):
+        try:
+            # Start the subprocess
+            process = subprocess.Popen(
+                command_parts,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=False, # We will decode manually in the thread
+                bufsize=1, # Line-buffered output
+                universal_newlines=False, # We handle decoding
+                # Prevents a new console window from popping up on Windows
+                creationflags=subprocess.CREATE_NO_WINDOW if self.is_windows and hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+            )
+
+            # Lists to store output (optional, but good for debugging/post-processing)
+            stdout_output_lines = []
+            stderr_output_lines = []
+
+            # Start threads to read stdout and stderr concurrently
+            stdout_thread = Thread(target=self._read_output_stream, args=(process.stdout, stdout_output_lines), daemon=True)
+            stdout_thread.start()
+
+            stderr_thread = Thread(target=self._read_output_stream, args=(process.stderr, stderr_output_lines), daemon=True)
+            stderr_thread.start()
+
+            # Main thread waits for user input to stop or process to finish
+            while process.poll() is None: # While the child process is still running
+                try:
+                    # Prompt for user input to stop the process
+                    user_input = input(f"{Colors.CYAN} (Type 'stop' and press Enter to halt) > {Colors.END}").strip().lower()
+                    if user_input == 'stop':
+                        print(f"{Colors.YELLOW}Attempting to stop process...{Colors.END}")
+                        process.terminate() # Send SIGTERM (or equivalent on Windows)
+                        break # Exit the loop
+                except EOFError: # Catch Ctrl+D
+                    print(f"\n{Colors.YELLOW}EOF detected. Attempting to stop process...{Colors.END}")
+                    process.terminate()
+                    break
+                except KeyboardInterrupt: # Catch Ctrl+C
+                    print(f"\n{Colors.YELLOW}KeyboardInterrupt detected. Attempting to stop process...{Colors.END}")
+                    process.terminate()
+                    break
+                time.sleep(0.1) # Small delay to prevent busy-waiting
+
+        except FileNotFoundError:
+            print(f"{Colors.RED}Error: The runner program ('{command_parts[0]}') for '{ext}' files was not found. Make sure it's installed and in your PATH.{Colors.END}")
+            return
+        except Exception as e:
+            print(f"{Colors.RED}An unexpected error occurred while trying to run the code file: {str(e)}{Colors.END}")
+            if process and process.poll() is None: # If process is still running, try to terminate
+                process.terminate()
+            return
+        finally:
+            # Ensure the process is fully terminated and resources are cleaned up
+            if process:
+                try:
+                    # Wait for the process to terminate, with a timeout
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    print(f"{Colors.RED}Process did not terminate gracefully within timeout. Killing...{Colors.END}")
+                    process.kill() # Force kill if terminate fails
+                
+                # Ensure output reading threads are joined (wait for them to finish reading)
+                if stdout_thread and stdout_thread.is_alive():
+                    stdout_thread.join(timeout=1)
+                if stderr_thread and stderr_thread.is_alive():
+                    stderr_thread.join(timeout=1)
+
+                # Close pipes explicitly if they are not already closed by join
+                if process.stdout:
+                    process.stdout.close()
+                if process.stderr:
+                    process.stderr.close()
+
+        # Report final status
+        if process and process.returncode == 0:
+            print(f"\n{Colors.GREEN}✓ Code execution completed successfully.{Colors.END}")
+        elif process and process.returncode is not None: # Process finished with a non-zero exit code
+            print(f"\n{Colors.RED}Code execution finished with exit code {process.returncode}.{Colors.END}")
+        else: # Process was terminated by user or other means (returncode is None if killed)
+            print(f"\n{Colors.YELLOW}Code execution halted by user or external signal.{Colors.END}")
+
+    def _interactive_mode(self):
         """
-        Displays the current Bash.ai configuration settings.
+        Starts the interactive terminal session for Bash.ai.
         """
-        print(f"\n{Colors.BOLD}Current Configuration:{Colors.END}")
-        for key, value in self.config.items():
-            print(f"  {key}: {value}")
-        print(f"  config_path: {CONFIG_PATH}")
+        print(f"\n{Colors.BOLD}{Colors.CYAN}💻 Bash.ai - AI Terminal Assistant{Colors.END}")
+        print(f"{Colors.CYAN}Platform: {platform.system()} {platform.release()}{Colors.END}")
+        print(f"{Colors.CYAN}Directory: {self.current_dir}{Colors.END}")
+        print(f"{Colors.CYAN}Server: {self.server_url}{Colors.END}")
+        print(f"{Colors.YELLOW}Type 'help' for commands, 'exit' to quit{Colors.END}\n")
+
+        while True:
+            try:
+                # Construct the prompt for the user
+                prompt = f"{Colors.GREEN}bash.ai{Colors.END} {Colors.BLUE}{os.path.basename(self.current_dir)}{Colors.END}> "
+                
+                # Get user input. input() itself handles the readline integration if available.
+                user_input = input(prompt).strip()
+                
+                if not user_input:
+                    continue # Skip empty input
+
+                # Handle built-in client commands
+                if user_input.lower() in ['exit', 'quit']:
+                    print(f"{Colors.CYAN}Goodbye!{Colors.END}")
+                    break # Exit the loop and program
+                    
+                elif user_input.lower() == 'help':
+                    self._show_help()
+                    continue
+                    
+                elif user_input.lower() == 'clear':
+                    os.system('cls' if self.is_windows else 'clear') # Clear screen
+                    continue
+                    
+                elif user_input.lower() == 'config':
+                    self._show_config()
+                    continue
+                    
+                elif user_input.startswith('cd '):
+                    self._handle_cd(user_input[3:].strip()) # Handle change directory
+                    continue
+
+                # Add user input to history
+                self.history.append(user_input)
+                # Trim history if it exceeds max_history
+                if len(self.history) > self.config.get('max_history', 100):
+                    self.history.pop(0)
+
+                # Query the AI server
+                ai_response_raw, success = self._query_ai(user_input, self._get_system_prompt())
+                
+                if not success:
+                    print(f"{Colors.RED}AI Error: {ai_response_raw}{Colors.END}")
+                    continue
+
+                # Parse the AI's response
+                parsed = self._parse_ai_response(ai_response_raw)
+                
+                if parsed['type'] == 'command':
+                    # If AI suggests a command
+                    if self.config.get('auto_execute', False):
+                        # Auto-execute if enabled in config
+                        output, success = self._execute_command(parsed['command'])
+                        print(output)
+                    else:
+                        # Prompt for confirmation before executing
+                        confirm = input(f"\nExecute command? {Colors.YELLOW}{parsed['command']}{Colors.END} [Y/n]: ")
+                        if confirm.lower() != 'n':
+                            output, success = self._execute_command(parsed['command'])
+                            print(output)
+                        else:
+                            print(f"{Colors.YELLOW}Command execution skipped.{Colors.END}")
+                            
+                elif parsed['type'] == 'code':
+                    # If AI generates code
+                    print(f"\n{Colors.PURPLE}Generated code for: {parsed['filename']}{Colors.END}")
+                    print(f"{Colors.CYAN}Preview:{Colors.END}")
+                    print("-" * 50)
+                    # Show a preview of the code (first 500 characters)
+                    print(parsed['code'][:500] + ("..." if len(parsed['code']) > 500 else ""))
+                    print("-" * 50)
+                    
+                    confirm = input(f"\nSave to {parsed['filename']}? [Y/n]: ")
+                    if confirm.lower() != 'n':
+                        if self._create_file(parsed['filename'], parsed['code']):
+                            # Offer to run the file after creation, if it's a known executable script type
+                            if parsed['filename'].lower().endswith(('.py', '.js', '.sh', '.ps1')):
+                                run_confirm = input(f"Run {parsed['filename']}? [y/N]: ")
+                                if run_confirm.lower() == 'y':
+                                    self._run_code_file(parsed['filename'])
+                            else:
+                                print(f"{Colors.YELLOW}File saved. Not a recognized executable script type for direct running.{Colors.END}")
+                        else:
+                            print(f"{Colors.RED}Failed to save file.{Colors.END}")
+                else:
+                    # If AI provides a regular explanation/conversational response
+                    print(f"\n{ai_response_raw}")
+
+            except KeyboardInterrupt:
+                # Handle Ctrl+C during input
+                print(f"\n{Colors.YELLOW}Press Ctrl+C again or type 'exit' to quit.{Colors.END}")
+            except EOFError:
+                # Handle Ctrl+D (End Of File)
+                print(f"\n{Colors.CYAN}Goodbye!{Colors.END}")
+                break
+            except Exception as e:
+                # Catch any unexpected errors
+                print(f"{Colors.RED}An unexpected error occurred: {str(e)}{Colors.END}")
+
+    def _handle_cd(self, path: str):
+        """
+        Handles changing the current working directory.
+        Supports '~' for home, '..' for parent, and absolute/relative paths.
+        """
+        try:
+            if path == '~':
+                path = str(Path.home()) # Expand '~' to home directory
+            elif path == '..':
+                path = str(Path(self.current_dir).parent) # Go up one directory
+            elif not os.path.isabs(path):
+                # If path is relative, join it with the current directory
+                path = os.path.join(self.current_dir, path)
+                
+            if os.path.isdir(path):
+                os.chdir(path) # Change directory
+                self.current_dir = os.getcwd() # Update current_dir to the new path
+                print(f"{Colors.GREEN}Changed to: {self.current_dir}{Colors.END}")
+            else:
+                print(f"{Colors.RED}Directory not found: {path}{Colors.END}")
+        except Exception as e:
+            print(f"{Colors.RED}Error changing directory: {str(e)}{Colors.END}")
+
+    def _run_code_file(self, filename: str):
+        """
+        Attempts to run a generated code file based on its extension,
+        displaying output in real-time and allowing the user to stop execution.
+        """
+        runners = {
+            '.py': 'python',
+            '.js': 'node',
+            '.sh': 'bash',
+            '.ps1': 'powershell.exe -ExecutionPolicy Bypass -File' # Full command for PowerShell
+        }
+        
+        ext = os.path.splitext(filename)[1].lower()
+        runner_command_str = runners.get(ext)
+        
+        if not runner_command_str:
+            print(f"{Colors.YELLOW}Don't know how to run files with extension '{ext}'.{Colors.END}")
+            print(f"{Colors.YELLOW}You may need to run it manually.{Colors.END}")
+            return
+
+        # Split the runner command string into parts for subprocess.Popen
+        # This handles cases like 'powershell.exe -ExecutionPolicy Bypass -File' correctly
+        command_parts = runner_command_str.split() + [filename]
+
+        print(f"{Colors.BLUE}Running code: {' '.join(command_parts)}{Colors.END}")
+        print(f"{Colors.YELLOW}Output will be displayed below. To halt, type 'stop' and press Enter.{Colors.END}")
+
+        process = None
+        stdout_thread = None
+        stderr_thread = None
+
+        try:
+            # Start the subprocess
+            process = subprocess.Popen(
+                command_parts,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=False, # We will decode manually in the thread
+                bufsize=1, # Line-buffered output
+                universal_newlines=False, # We handle decoding
+                # Prevents a new console window from popping up on Windows
+                creationflags=subprocess.CREATE_NO_WINDOW if self.is_windows and hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+            )
+
+            # Lists to store output (optional, but good for debugging/post-processing)
+            stdout_output_lines = []
+            stderr_output_lines = []
+
+            # Start threads to read stdout and stderr concurrently
+            stdout_thread = Thread(target=self._read_output_stream, args=(process.stdout, stdout_output_lines), daemon=True)
+            stdout_thread.start()
+
+            stderr_thread = Thread(target=self._read_output_stream, args=(process.stderr, stderr_output_lines), daemon=True)
+            stderr_thread.start()
+
+            # Main thread waits for user input to stop or process to finish
+            while process.poll() is None: # While the child process is still running
+                try:
+                    # Prompt for user input to stop the process
+                    user_input = input(f"{Colors.CYAN} (Type 'stop' and press Enter to halt) > {Colors.END}").strip().lower()
+                    if user_input == 'stop':
+                        print(f"{Colors.YELLOW}Attempting to stop process...{Colors.END}")
+                        process.terminate() # Send SIGTERM (or equivalent on Windows)
+                        break # Exit the loop
+                except EOFError: # Catch Ctrl+D
+                    print(f"\n{Colors.YELLOW}EOF detected. Attempting to stop process...{Colors.END}")
+                    process.terminate()
+                    break
+                except KeyboardInterrupt: # Catch Ctrl+C
+                    print(f"\n{Colors.YELLOW}KeyboardInterrupt detected. Attempting to stop process...{Colors.END}")
+                    process.terminate()
+                    break
+                time.sleep(0.1) # Small delay to prevent busy-waiting
+
+        except FileNotFoundError:
+            print(f"{Colors.RED}Error: The runner program ('{command_parts[0]}') for '{ext}' files was not found. Make sure it's installed and in your PATH.{Colors.END}")
+            return
+        except Exception as e:
+            print(f"{Colors.RED}An unexpected error occurred while trying to run the code file: {str(e)}{Colors.END}")
+            if process and process.poll() is None: # If process is still running, try to terminate
+                process.terminate()
+            return
+        finally:
+            # Ensure the process is fully terminated and resources are cleaned up
+            if process:
+                try:
+                    # Wait for the process to terminate, with a timeout
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    print(f"{Colors.RED}Process did not terminate gracefully within timeout. Killing...{Colors.END}")
+                    process.kill() # Force kill if terminate fails
+                
+                # Ensure output reading threads are joined (wait for them to finish reading)
+                if stdout_thread and stdout_thread.is_alive():
+                    stdout_thread.join(timeout=1)
+                if stderr_thread and stderr_thread.is_alive():
+                    stderr_thread.join(timeout=1)
+
+                # Close pipes explicitly if they are not already closed by join
+                if process.stdout:
+                    process.stdout.close()
+                if process.stderr:
+                    process.stderr.close()
+
+        # Report final status
+        if process and process.returncode == 0:
+            print(f"\n{Colors.GREEN}✓ Code execution completed successfully.{Colors.END}")
+        elif process and process.returncode is not None: # Process finished with a non-zero exit code
+            print(f"\n{Colors.RED}Code execution finished with exit code {process.returncode}.{Colors.END}")
+        else: # Process was terminated by user or other means (returncode is None if killed)
+            print(f"\n{Colors.YELLOW}Code execution halted by user or external signal.{Colors.END}")
 
 def main():
     """
