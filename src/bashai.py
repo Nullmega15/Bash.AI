@@ -30,7 +30,7 @@ except ImportError:
 # Configuration paths and defaults
 # This configuration file will store the server URL and other settings
 CONFIG_PATH = Path.home() / ".bashai_config.json"
-DEFAULT_SERVER_URL = "http://localhost:8000" # Default server URL
+DEFAULT_SERVER_URL = "http://localhost:8000/" # Default server URL
 
 class Colors:
     """ANSI color codes for cross-platform terminal colors"""
