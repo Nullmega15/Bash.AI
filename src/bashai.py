@@ -39,13 +39,16 @@ CONFIG_PATH = Path.home() / ".bashai_config.json"
 # --- Hardcoded Defaults (User-Friendly) ---
 # These are the *default* values. Users can still override the server URL with --server.
 # The Supabase public URL and Anon Key are safe to be in client code.
-DEFAULT_SERVER_URL = "http://localhost:8000/" # Default AI server URL
+DEFAULT_SERVER_URL = "http://84.247.164.54:8000/" # Default AI server URL
 
 # IMPORTANT: Replace these with your actual Supabase Project URL and Anon Key.
 # It's recommended to set them as environment variables (e.g., in your shell profile)
 # for easier management, but hardcoding here is also acceptable as they are public keys.
 SUPABASE_URL_PUBLIC = os.getenv("SUPABASE_URL_PUBLIC", "https://modualolzuqetjpfigsq.supabase.co")
 SUPABASE_ANON_KEY_PUBLIC = os.getenv("SUPABASE_ANON_KEY_PUBLIC", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1vZHVhbG9senVxZXRqcGZpZ3NxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkxNDg2MDIsImV4cCI6MjA2NDcyNDYwMn0.lWKw1dgbJsKvo8aGXofNIsN7iAi6uFn1G8FgeSbGu2s")
+
+# Max file size to display in 'view' command or send to AI for analysis (in bytes)
+MAX_FILE_CONTENT_SIZE = 10 * 1024 # 10 KB
 
 class Colors:
     """ANSI color codes for cross-platform terminal colors"""
@@ -62,8 +65,11 @@ class Colors:
     @classmethod
     def disable_on_windows(cls):
         """
+
         Disable ANSI colors on older Windows versions that don't support them.
+
         Newer Windows 10/11 terminals support ANSI colors by default.
+
         """
         if platform.system() == "Windows":
             try:
@@ -116,6 +122,7 @@ class Spinner:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """
+
         Context manager exit point. Stops the spinner thread and waits for it to finish.
         """
         self.stop_running = True
@@ -163,26 +170,23 @@ class BashAI:
 
     def _init_supabase(self):
         """
+
         Initializes the Supabase client and attempts to authenticate the user.
         """
         if SUPABASE_URL_PUBLIC == "YOUR_SUPABASE_URL_PUBLIC_HERE" or SUPABASE_ANON_KEY_PUBLIC == "YOUR_SUPABASE_ANON_KEY_PUBLIC_HERE":
-            print(f"{Colors.RED}Error: Supabase public URL or anon key is not configured in bashai.py. Authentication will not work.{Colors.END}")
-            print(f"{Colors.YELLOW}Please update SUPABASE_URL_PUBLIC and SUPABASE_ANON_KEY_PUBLIC in bashai.py.{Colors.END}")
+            print(f"{Colors.RED}Error: Supabase public URL or anon key is not configured in bashai.py.{Colors.END}")
+            print(f"{Colors.YELLOW}Please replace 'YOUR_SUPABASE_URL_PUBLIC_HERE' and 'YOUR_SUPABASE_ANON_KEY_PUBLIC_HERE' in bashai.py.{Colors.END}")
             self.supabase_client = None
             self.jwt_token = None
             return
 
         try:
             self.supabase_client = create_client(SUPABASE_URL_PUBLIC, SUPABASE_ANON_KEY_PUBLIC)
-            # print(f"{Colors.GREEN}Supabase client initialized.{Colors.END}") # Too verbose, only show if issues.
             
             # Attempt to retrieve token from config first
             stored_jwt = self.config.get("jwt_token")
             if stored_jwt:
                 self.jwt_token = stored_jwt
-                # print(f"{Colors.GREEN}Using stored JWT token.{Colors.END}") # Too verbose
-                # Optional: You could call self.supabase_client.auth.set_session(access_token=stored_jwt, refresh_token=...)
-                # to rehydrate the session if you stored both, but for just sending the JWT it's not strictly needed.
             else:
                 # If no token stored, try anonymous sign-in or prompt for login
                 self._authenticate_user()
@@ -199,6 +203,7 @@ class BashAI:
         """
         if not self.supabase_client:
             print(f"{Colors.RED}Supabase client not initialized. Cannot authenticate.{Colors.END}")
+
             return
 
         print(f"\n{Colors.BOLD}┌──────────────────────────────────────────────┐{Colors.END}")
@@ -270,8 +275,9 @@ class BashAI:
             "auto_execute": False,
             "safe_mode": True,
             "jwt_token": None, # JWT will be stored here after successful login
-            "supabase_url_public": SUPABASE_URL_PUBLIC,
-            "supabase_anon_key_public": SUPABASE_ANON_KEY_PUBLIC
+            # Public Supabase details are now hardcoded in the script, not in the config file by default
+            # "supabase_url_public": SUPABASE_URL_PUBLIC,
+            # "supabase_anon_key_public": SUPABASE_ANON_KEY_PUBLIC
         }
 
         if CONFIG_PATH.exists():
@@ -292,6 +298,7 @@ class BashAI:
 
     def _save_config(self, config_data: Dict):
         """
+
         Saves the provided configuration dictionary to the CONFIG_PATH.
         """
         try:
@@ -303,6 +310,128 @@ class BashAI:
             print(f"{Colors.RED}Warning: Could not save config to {CONFIG_PATH}: {e}{Colors.END}")
         except Exception as e:
             print(f"{Colors.RED}An unexpected error occurred while saving config: {e}{Colors.END}")
+
+    def _get_os_and_shell_info(self) -> Dict[str, str]:
+        """
+
+        Detects the current operating system and the active shell.
+        Returns a dictionary with 'os' and 'shell' keys.
+        """
+        os_type = platform.system()
+        shell_type = "unknown"
+
+        if os_type == "Windows":
+            # Check for PowerShell by looking for PowerShell-specific env vars or process names
+            if os.getenv("PSModulePath"):
+                shell_type = "powershell"
+            elif os.getenv("ComSpec") and "cmd.exe" in os.getenv("ComSpec").lower():
+                shell_type = "cmd"
+            else:
+                shell_type = "cmd" # Default to cmd if not clearly PowerShell
+        elif os_type == "Linux" or os_type == "Darwin": # Darwin is macOS
+            shell_path = os.getenv("SHELL")
+            if shell_path:
+                shell_type = Path(shell_path).name # e.g., 'bash', 'zsh', 'sh'
+            else:
+                # Try to get parent process name, or default
+                try:
+                    # This is a bit more involved and OS-specific,
+                    # but for basic shell detection, SHELL env var is usually enough.
+                    # For more robust, would need 'psutil' or similar.
+                    parent_process_name = subprocess.check_output(
+                        ["ps", "-p", str(os.getppid()), "-o", "comm="], text=True
+                    ).strip()
+                    shell_type = parent_process_name.split('/')[-1] # e.g., 'bash', 'zsh'
+                except Exception:
+                    shell_type = "bash" # Fallback
+        
+        return {"os": os_type, "shell": shell_type}
+
+    def _get_current_directory_listing(self) -> str:
+        """
+        Gets a formatted string of the current directory's contents.
+        Lists files and directories separately.
+
+        """
+        try:
+            items = os.listdir(self.current_dir)
+            files = []
+            dirs = []
+            for item in items:
+                item_path = Path(self.current_dir) / item
+                if item_path.is_file():
+                    files.append(item)
+                elif item_path.is_dir():
+                    dirs.append(item)
+            
+            listing = []
+            if dirs:
+                listing.append("Directories: " + ", ".join(sorted(dirs)))
+            if files:
+                listing.append("Files: " + ", ".join(sorted(files)))
+            
+            if not listing:
+                return "Current directory is empty."
+            
+            return "Current directory contents:\n" + "\n".join(listing)
+        except Exception as e:
+            return f"Error getting directory contents: {e}"
+
+    def _read_file_content(self, filepath: str) -> Optional[str]:
+        """
+        Reads the content of a file, handling errors and truncating if too large.
+        Returns the content or None if an error occurs.
+        """
+        full_path = Path(self.current_dir) / filepath
+        if not full_path.is_file():
+            print(f"{Colors.RED}Error: File not found or not a file: {filepath}{Colors.END}")
+            return None
+        
+        try:
+            file_size = full_path.stat().st_size
+            if file_size > MAX_FILE_CONTENT_SIZE:
+                print(f"{Colors.YELLOW}Warning: File '{filepath}' is too large ({file_size} bytes). Displaying only the first {MAX_FILE_CONTENT_SIZE} bytes.{Colors.END}")
+            
+            with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read(MAX_FILE_CONTENT_SIZE)
+            
+            return content
+        except FileNotFoundError:
+            print(f"{Colors.RED}Error: File not found: {filepath}{Colors.END}")
+            return None
+        except PermissionError:
+            print(f"{Colors.RED}Error: Permission denied to read file: {filepath}{Colors.END}")
+            return None
+        except Exception as e:
+            print(f"{Colors.RED}Error reading file {filepath}: {str(e)}{Colors.END}")
+            return None
+
+    def _open_file_with_default_app(self, filepath: str):
+        """
+        Opens a file using the operating system's default application.
+        """
+        full_path = Path(self.current_dir) / filepath
+        if not full_path.exists():
+            print(f"{Colors.RED}Error: File or directory not found: {filepath}{Colors.END}")
+            return
+        
+        try:
+            if self.is_windows:
+                os.startfile(str(full_path))
+            elif self.is_macos:
+                subprocess.run(['open', str(full_path)], check=True)
+            elif self.is_linux:
+                subprocess.run(['xdg-open', str(full_path)], check=True)
+            else:
+                print(f"{Colors.RED}Error: 'open' command not supported on this OS: {platform.system()}{Colors.END}")
+                return
+            print(f"{Colors.GREEN}Opened {filepath} with default application.{Colors.END}")
+        except FileNotFoundError:
+            print(f"{Colors.RED}Error: Default application not found for this file type or 'open' command not available.{Colors.END}")
+        except subprocess.CalledProcessError as e:
+            print(f"{Colors.RED}Error opening file {filepath}: {e}{Colors.END}")
+        except Exception as e:
+            print(f"{Colors.RED}An unexpected error occurred while opening {filepath}: {str(e)}{Colors.END}")
 
 
     def _check_server_connection(self) -> bool:
@@ -325,6 +454,7 @@ class BashAI:
     def _query_ai(self, message: str, system_prompt: str = None) -> Tuple[str, bool]:
         """
         Sends a query to the AI server and retrieves the response, including JWT.
+
         """
         headers = {
             "Content-Type": "application/json",
@@ -355,8 +485,8 @@ class BashAI:
                         error_data = response.json()
                         error_detail = error_data.get("detail", f"Server responded with status {response.status_code}.")
                     except json.JSONDecodeError:
-                        # If response is not JSON, use raw text
-                        error_detail = f"Server responded with status {response.status_code} and non-JSON content: {response.text[:100]}..."
+                        # If response is not JSON, use raw text (first 100 chars)
+                        error_detail = f"Server responded with status {response.status_code} and non-JSON content: '{response.text[:100]}...'"
                     return f"AI Server Error ({response.status_code}): {error_detail}", False
 
                 # If status code is 200, attempt to parse JSON
@@ -364,7 +494,7 @@ class BashAI:
                     data = response.json()
                     return data.get("response", ""), data.get("success", False)
                 except json.JSONDecodeError:
-                    return f"Invalid response from AI server: Expected JSON, but got '{response.text[:100]}...'. Please check server logs.", False
+                    return f"Invalid response from AI server: Expected JSON, but got non-parseable content. Raw response: '{response.text[:100]}...'. Please check server logs.", False
                     
         except requests.exceptions.ConnectionError:
             return f"Connection error: Could not reach AI server at {self.server_url}. Is it running and accessible?", False
@@ -378,8 +508,9 @@ class BashAI:
 
     def _execute_command(self, cmd: str, show_command: bool = True) -> Tuple[str, bool]:
         """
+
         Executes a system command safely. This function is for short-lived commands
-        where the full output is expected at once.
+        where the full output is expected at once. Includes AI-powered debugging on failure.
         """
         if show_command:
             print(f"{Colors.BLUE}Executing:{Colors.END} {cmd}")
@@ -398,33 +529,41 @@ class BashAI:
                 shell = True # Let the OS shell interpret the command
                 
                 if self.is_windows:
-                    # Use cmd.exe on Windows. CREATE_NO_WINDOW prevents a new console window from popping up.
                     result = subprocess.run(
                         cmd, shell=shell, capture_output=True, text=True,
                         creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
                     )
                 else:
-                    # Use bash/sh on Unix-like systems (Linux, macOS)
                     result = subprocess.run(
                         cmd, shell=shell, capture_output=True, text=True
                     )
                 
                 if result.returncode == 0:
-                    # Command succeeded
                     output = result.stdout.strip() if result.stdout else "✓ Command completed successfully"
                     return output, True
                 else:
-                    # Command failed
                     error = result.stderr.strip() if result.stderr else f"Command failed with exit code {result.returncode}"
-                    return f"{Colors.RED}Error: {error}{Colors.END}", False
+                    print(f"{Colors.RED}Command failed (Exit Code: {result.returncode}).{Colors.END}")
+                    if error:
+                        print(f"{Colors.RED}Stderr:\n{error}{Colors.END}")
+                    
+                    debug_choice = input(f"{Colors.YELLOW}Attempt to debug this command with AI? [y/N]: ").strip().lower()
+                    if debug_choice == 'y':
+                        return self._debug_command_error(cmd, error)
+                    else:
+                        print(f"{Colors.YELLOW}Command debugging skipped.{Colors.END}")
+                        return f"{Colors.RED}Command failed and debugging skipped.{Colors.END}", False
                     
         except FileNotFoundError:
-            return f"{Colors.RED}Error: Command not found. Make sure it's in your PATH.{Colors.END}", False
+            print(f"{Colors.RED}Error: Command not found. Make sure it's in your PATH.{Colors.END}")
+            return f"{Colors.RED}Error: Command not found.{Colors.END}", False
         except Exception as e:
+            print(f"{Colors.RED}Execution error: {str(e)}{Colors.END}")
             return f"{Colors.RED}Execution error: {str(e)}{Colors.END}", False
 
     def _create_file(self, filename: str, content: str) -> bool:
         """
+
         Creates a file with the given content.
         """
         try:
@@ -441,31 +580,39 @@ class BashAI:
     def _get_system_prompt(self) -> str:
         """
         Generates a system prompt that provides context to the AI model,
-        including the current operating system and directory.
+        including the current operating system, active shell, directory,
+        and its contents.
         """
-        os_info = {
-            'system': platform.system(),
-            'release': platform.release(),
-            'machine': platform.machine(),
-            'current_dir': self.current_dir
-        }
+        os_info = self._get_os_and_shell_info()
+        dir_listing = self._get_current_directory_listing()
         
         return f"""You are Bash.ai, an expert terminal assistant and code generator.
-Current environment: {os_info['system']} {os_info['release']} ({os_info['machine']})
-Current directory: {os_info['current_dir']}
+Current OS: {os_info['os']}
+Current Shell: {os_info['shell']}
+Current directory: {self.current_dir}
+{dir_listing}
 
-Guidelines for your responses:
-1.  **For Terminal Commands**: If the user asks for a command to execute, **ONLY** provide the exact command wrapped in `<execute>` tags. Do NOT include any other text, explanations, or markdown code blocks around it.
-    Example: `<execute>ls -l</execute>`
-    Example (Windows): `<execute>dir /w</execute>`
-2.  **For Code Generation**: If the user asks for code (e.g., a script, a program), provide the complete, runnable code inside `<filename>name.ext</filename><code>full_code_here</code>` tags. Do NOT include explanations outside these tags.
-3.  **For Explanations/Conversational Responses**: If the request is not for a command or code, just provide the explanation text directly. Do NOT use any special tags.
+Strict Guidelines for your responses:
+1.  **For Terminal Commands**: If the user asks for a command to execute, **ONLY** provide the exact command wrapped in `<execute>` tags. Do NOT include any other text, explanations, or markdown code blocks around it. **Ensure the command is perfectly tailored for the detected Current OS and Current Shell.**
+    Example (for Linux/bash): `<execute>ls -l</execute>`
+    Example (for Windows/powershell): `<execute>Get-ChildItem -Force</execute>`
+    Example (for Windows/cmd): `<execute>dir /w</execute>`
+2.  **For Code Generation (Scripts, Programs, etc.)**: If the user asks for code, you **MUST** provide the complete, runnable code inside `<filename>name.ext</filename><code>full_code_here</code>` tags. **DO NOT** provide code outside these tags, as the client will not be able to process it as a file. The `name.ext` should be a sensible filename including the appropriate extension (e.g., `script.py`, `my_app.js`, `backup.sh`).
+    Example: `<filename>hello.py</filename><code>print("Hello, world!")</code>`
+3.  **For Debugging Code Errors**: If you are provided with code and an error message, provide EITHER:
+    * An `<execute>` command to fix it (e.g., install a missing package).
+    * The corrected code within `<filename>...</filename><code>...</code>` tags.
+    * An explanation if no direct fix can be provided (without special tags).
+    **CRITICAL**: If your suggested fix involves code, it MUST be inside `<filename><code>` tags.
+4.  **For Debugging Command Errors**: If you are provided with a command and its error message (from stderr), provide EITHER:
+    * A corrected `<execute>` command.
+    * An `<execute>` command to install a missing tool.
+    * An explanation if no direct fix can be provided (without special tags).
+    **CRITICAL**: If your suggested fix is a command, it MUST be inside `<execute>` tags.
+5.  **For Explanations/Conversational Responses**: If the request is not for a command or code, just provide the explanation text directly. Do NOT use any special tags.
 
-Strictly adhere to these formats. Do not deviate.
-
-Current OS-specific command syntax:
-- Windows: Use PowerShell/CMD syntax (e.g., dir, copy, del, Get-Process).
-- Linux/macOS: Use bash syntax (e.g., ls, cp, rm, ps aux)."""
+**Failure to follow these formatting rules for commands and code will result in the client not being able to understand and process your response correctly.**
+"""
 
     def _parse_ai_response(self, response: str) -> Dict:
         """
@@ -538,10 +685,12 @@ Current OS-specific command syntax:
                 sys.stderr.flush()
         stream.close() # Ensure stream is closed when done
 
-    def _run_code_file(self, filename: str):
+    def _run_code_file(self, filename: str, code_content: str) -> bool:
         """
         Attempts to run a generated code file based on its extension,
         displaying output in real-time and allowing the user to stop execution.
+
+        Includes AI-powered debugging on failure.
         """
         runners = {
             '.py': 'python',
@@ -556,7 +705,7 @@ Current OS-specific command syntax:
         if not runner_command_str:
             print(f"{Colors.YELLOW}Don't know how to run files with extension '{ext}'.{Colors.END}")
             print(f"{Colors.YELLOW}You may need to run it manually.{Colors.END}")
-            return
+            return False
 
         # Split the runner command string into parts for subprocess.Popen
         # This handles cases like 'powershell.exe -ExecutionPolicy Bypass -File' correctly
@@ -568,6 +717,9 @@ Current OS-specific command syntax:
         process = None
         stdout_thread = None
         stderr_thread = None
+        
+        stdout_lines = []
+        stderr_lines = []
 
         try:
             # Start the subprocess
@@ -579,18 +731,14 @@ Current OS-specific command syntax:
                 bufsize=1, # Line-buffered output
                 universal_newlines=False, # We handle decoding
                 # Prevents a new console window from popping up on Windows
-                creationflags=subprocess.CREATE_NO_WINDOW if self.is_windows and hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
             )
 
-            # Lists to store output (optional, but good for debugging/post-processing)
-            stdout_output_lines = []
-            stderr_output_lines = []
-
             # Start threads to read stdout and stderr concurrently
-            stdout_thread = Thread(target=self._read_output_stream, args=(process.stdout, stdout_output_lines), daemon=True)
+            stdout_thread = Thread(target=self._read_output_stream, args=(process.stdout, stdout_lines), daemon=True)
             stdout_thread.start()
 
-            stderr_thread = Thread(target=self._read_output_stream, args=(process.stderr, stderr_output_lines), daemon=True)
+            stderr_thread = Thread(target=self._read_output_stream, args=(process.stderr, stderr_lines), daemon=True)
             stderr_thread.start()
 
             # Main thread waits for user input to stop or process to finish
@@ -614,12 +762,12 @@ Current OS-specific command syntax:
 
         except FileNotFoundError:
             print(f"{Colors.RED}Error: The runner program ('{command_parts[0]}') for '{ext}' files was not found. Make sure it's installed and in your PATH.{Colors.END}")
-            return
+            return False
         except Exception as e:
             print(f"{Colors.RED}An unexpected error occurred while trying to run the code file: {str(e)}{Colors.END}")
             if process and process.poll() is None: # If process is still running, try to terminate
                 process.terminate()
-            return
+            return False
         finally:
             # Ensure the process is fully terminated and resources are cleaned up
             if process:
@@ -642,20 +790,207 @@ Current OS-specific command syntax:
                 if process.stderr:
                     process.stderr.close()
 
-        # Report final status
+        # After execution (or termination), check return code and potentially debug
+        full_stdout = "\n".join(stdout_lines)
+        full_stderr = "\n".join(stderr_lines)
+
         if process and process.returncode == 0:
             print(f"\n{Colors.GREEN}✓ Code execution completed successfully.{Colors.END}")
-        elif process and process.returncode is not None: # Process finished with a non-zero exit code
-            print(f"\n{Colors.RED}Code execution finished with exit code {process.returncode}.{Colors.END}")
-        else: # Process was terminated by user or other means (returncode is None if killed)
-            print(f"\n{Colors.YELLOW}Code execution halted by user or external signal.{Colors.END}")
+            if full_stdout:
+                print(f"{Colors.CYAN}Output:{Colors.END}\n{full_stdout}")
+            return True
+        elif process and process.returncode is not None:
+            print(f"\n{Colors.RED}Code execution failed (Exit Code: {process.returncode}).{Colors.END}")
+            if full_stderr:
+                print(f"{Colors.RED}Stderr:\n{full_stderr}{Colors.END}")
+
+            debug_choice = input(f"{Colors.YELLOW}Attempt to debug with AI? [y/N]: ").strip().lower()
+            if debug_choice == 'y':
+                return self._debug_code_error(filename, code_content, full_stderr)
+            else:
+                print(f"{Colors.YELLOW}Code execution failed. Debugging skipped.{Colors.END}")
+                return False
+        else: # Process was terminated or other non-zero exit scenario
+            print(f"\n{Colors.YELLOW}Code execution halted or encountered unhandled error.{Colors.END}")
+            if full_stderr:
+                print(f"{Colors.RED}Stderr:\n{full_stderr}{Colors.END}")
+            return False
+
+    def _debug_code_error(self, filename: str, code_content: str, error_message: str) -> bool:
+        """
+
+        Interacts with the AI to debug a code execution error.
+        Returns True if fixed and successfully re-run, False otherwise.
+
+        """
+        DEBUG_ATTEMPTS = 2 # Limit debugging attempts
+
+        print(f"\n{Colors.BOLD}{Colors.YELLOW}Attempting AI-powered debugging for {filename}...{Colors.END}")
+
+        for attempt in range(1, DEBUG_ATTEMPTS + 1):
+            print(f"\n{Colors.CYAN}--- Debugging Attempt {attempt}/{DEBUG_ATTEMPTS} ---{Colors.END}")
+            
+            debug_prompt = (
+                f"The following code file '{filename}' was executed and failed with this error:\n"
+                f"```error\n{error_message}\n```\n\n"
+                f"The code content is:\n"
+                f"```{os.path.splitext(filename)[1].lstrip('.')}\n{code_content}\n```\n\n"
+                f"Please analyze the error. If it's a missing dependency, provide an `<execute>` command to install it. "
+                f"If it's a code error, provide the corrected code within `<filename>...</filename><code>...</code>` tags. "
+                f"If you cannot provide a fix, explain why (without special tags). Prioritize simple installation commands for missing dependencies."
+                f"Ensure the command or code is suitable for my current OS ({self._get_os_and_shell_info()['os']}) and shell ({self._get_os_and_shell_info()['shell']})."
+            )
+
+            ai_response_raw, success = self._query_ai(debug_prompt, self._get_system_prompt())
+
+            if not success:
+                print(f"{Colors.RED}AI Debugging Error: {ai_response_raw}{Colors.END}")
+                continue
+
+            parsed_debug_response = self._parse_ai_response(ai_response_raw)
+
+            if parsed_debug_response['type'] == 'command' and parsed_debug_response['command']:
+                fix_command = parsed_debug_response['command']
+                print(f"\n{Colors.BLUE}AI suggests a fix command:{Colors.END} {fix_command}")
+                confirm_fix = input("Execute this fix? [y/N]: ").strip().lower()
+                if confirm_fix == 'y':
+                    fix_output, fix_success = self._execute_command(fix_command, show_command=True) # Show execution
+                    print(fix_output)
+                    if fix_success:
+                        print(f"{Colors.GREEN}Fix command executed successfully.{Colors.END}")
+                        # Offer to re-run the original code after the fix
+                        rerun_choice = input(f"Attempt to re-run '{filename}' after applying fix? [y/N]: ").strip().lower()
+                        if rerun_choice == 'y':
+                            print(f"{Colors.CYAN}Re-running original code after fix...{Colors.END}")
+                            # Directly re-execute the original code and check for success
+                            if self._execute_code_after_fix(filename, code_content):
+
+                                return True # Successfully fixed and re-ran
+                            else:
+                                print(f"{Colors.YELLOW}Re-run failed even after fix. Trying next debug attempt if available.{Colors.END}")
+                        else:
+                            print(f"{Colors.YELLOW}Fix applied, but re-run skipped by user.{Colors.END}")
+                            return False # User chose not to re-run
+                    else:
+                        print(f"{Colors.RED}Fix command failed to execute successfully.{Colors.END}")
+                else:
+                    print(f"{Colors.YELLOW}Fix execution skipped by user.{Colors.END}")
+                    return False # User opted out of fix
+
+            elif parsed_debug_response['type'] == 'code' and parsed_debug_response['code']:
+                fixed_code = parsed_debug_response['code']
+                print(f"\n{Colors.BLUE}AI suggests corrected code for {filename}:{Colors.END}")
+                print("-" * 50)
+                print(fixed_code[:500] + ("..." if len(fixed_code) > 500 else ""))
+                print("-" * 50)
+                
+                confirm_save = input("Save corrected code to file? [y/N]: ").strip().lower()
+                if confirm_save == 'y':
+                    if self._create_file(filename, fixed_code):
+                        print(f"{Colors.GREEN}Corrected code saved to {filename}.{Colors.END}")
+                        rerun_choice = input(f"Attempt to re-run '{filename}' with corrected code? [y/N]: ").strip().lower()
+                        if rerun_choice == 'y':
+                            print(f"{Colors.CYAN}Re-running code with AI-suggested corrections...{Colors.END}")
+                            if self._execute_code_after_fix(filename, fixed_code): # Re-run with new content
+                                return True # Successfully fixed and re-ran
+                            else:
+                                print(f"{Colors.YELLOW}Re-run failed even with corrected code. Trying next debug attempt if available.{Colors.END}")
+                        else:
+                            print(f"{Colors.YELLOW}Corrected code saved, but re-run skipped by user.{Colors.END}")
+                            return False # User chose not to re-run
+                    else:
+                        print(f"{Colors.RED}Failed to save corrected code.{Colors.END}")
+                else:
+                    print(f"{Colors.YELLOW}Saving corrected code skipped by user.{Colors.END}")
+                    return False
+
+            else:
+                # AI provided an explanation or couldn't provide a direct fix
+                print(f"\n{Colors.YELLOW}AI Debugging Suggestion:{Colors.END}")
+                print(ai_response_raw)
+                if attempt < DEBUG_ATTEMPTS:
+                    retry_choice = input("Attempt another AI debugging pass? [y/N]: ").strip().lower()
+                    if retry_choice != 'y':
+                        print(f"{Colors.YELLOW}Debugging aborted by user.{Colors.END}")
+                        return False
+                else:
+                    print(f"{Colors.RED}AI could not provide a suitable fix after {DEBUG_ATTEMPTS} attempts.{Colors.END}")
+                    print(f"{Colors.RED}Manual intervention may be required.{Colors.END}")
+                    return False
+
+        return False # If loop finishes without a successful fix and re-run
+
+
+    def _debug_command_error(self, command: str, error_message: str) -> Tuple[str, bool]:
+        """
+        Interacts with the AI to debug a failed command.
+        Returns the new command and success status, or original error and False.
+        """
+        DEBUG_ATTEMPTS = 2 # Limit debugging attempts for commands
+
+        print(f"\n{Colors.BOLD}{Colors.YELLOW}Attempting AI-powered debugging for command...{Colors.END}")
+
+        for attempt in range(1, DEBUG_ATTEMPTS + 1):
+            print(f"\n{Colors.CYAN}--- Debugging Attempt {attempt}/{DEBUG_ATTEMPTS} ---{Colors.END}")
+            
+            debug_prompt = (
+                f"The command '{command}' was executed and failed with this error:\n"
+                f"```error\n{error_message}\n```\n\n"
+                f"Please analyze the error. Provide EITHER:\n"
+                f"1. A corrected command to execute within `<execute>` tags (e.g., if syntax was wrong or arguments were missing).\n"
+                f"2. A command to install a missing tool within `<execute>` tags (e.g., `sudo apt install tool-name`, `pip install package-name`).\n"
+                f"3. An explanation if you cannot provide a direct command fix (without special tags).\n"
+                f"Ensure the command is suitable for my current OS ({self._get_os_and_shell_info()['os']}) and shell ({self._get_os_and_shell_info()['shell']})."
+                f"**CRITICAL**: If your suggested fix is a command, it MUST be inside `<execute>` tags."
+            )
+
+            ai_response_raw, success = self._query_ai(debug_prompt, self._get_system_prompt())
+
+            if not success:
+                print(f"{Colors.RED}AI Debugging Error: {ai_response_raw}{Colors.END}")
+                continue # Try next attempt
+
+            parsed_debug_response = self._parse_ai_response(ai_response_raw)
+
+            if parsed_debug_response['type'] == 'command' and parsed_debug_response['command']:
+                suggested_command = parsed_debug_response['command']
+                print(f"\n{Colors.BLUE}AI suggests a new command:{Colors.END} {suggested_command}")
+                confirm_exec = input("Execute this suggested command? [y/N]: ").strip().lower()
+                if confirm_exec == 'y':
+                    output, exec_success = self._execute_command(suggested_command, show_command=True)
+                    print(output)
+                    if exec_success:
+                        print(f"{Colors.GREEN}Command debugging successful!{Colors.END}")
+                        return output, True # Command fixed and successfully executed
+                    else:
+                        print(f"{Colors.YELLOW}Suggested command failed again. Trying next debug attempt if available.{Colors.END}")
+                        # Loop will continue to next attempt
+                else:
+                    print(f"{Colors.YELLOW}Suggested command execution skipped by user.{Colors.END}")
+                    return f"{Colors.YELLOW}Command debugging skipped by user.{Colors.END}", False # User opted out
+            else:
+                # AI provided an explanation or couldn't provide a direct command fix
+                print(f"\n{Colors.YELLOW}AI Debugging Suggestion:{Colors.END}")
+                print(ai_response_raw)
+                if attempt < DEBUG_ATTEMPTS:
+                    retry_choice = input("Attempt another AI debugging pass? [y/N]: ").strip().lower()
+                    if retry_choice != 'y':
+                        print(f"{Colors.YELLOW}Command debugging aborted by user.{Colors.END}")
+                        return f"{Colors.YELLOW}Command debugging aborted by user.{Colors.END}", False
+                else:
+                    print(f"{Colors.RED}AI could not provide a suitable fix for the command after {DEBUG_ATTEMPTS} attempts.{Colors.END}")
+                    print(f"{Colors.RED}Manual intervention may be required.{Colors.END}")
+                    return f"{Colors.RED}Command failed and AI could not debug.{Colors.END}", False
+
+        return f"{Colors.RED}Command failed and AI could not debug after multiple attempts.{Colors.END}", False # Fallback if all attempts fail
 
     def _interactive_mode(self):
         """
         Starts the interactive terminal session for Bash.ai.
         """
+        os_info = self._get_os_and_shell_info()
         print(f"\n{Colors.BOLD}{Colors.CYAN}💻 Bash.ai - AI Terminal Assistant{Colors.END}")
-        print(f"{Colors.CYAN}Platform: {platform.system()} {platform.release()}{Colors.END}")
+        print(f"{Colors.CYAN}Platform: {os_info['os']} / Shell: {os_info['shell']}{Colors.END}")
         print(f"{Colors.CYAN}Directory: {self.current_dir}{Colors.END}")
         print(f"{Colors.CYAN}AI Server: {self.server_url}{Colors.END}")
         if self.jwt_token:
@@ -695,7 +1030,26 @@ Current OS-specific command syntax:
                 elif user_input.lower() == 'login': # New command for logging in
                     self._authenticate_user()
                     continue
+                
+                elif user_input.lower() == 'list': # New command to list directory contents
+                    print(f"\n{Colors.CYAN}{self._get_current_directory_listing()}{Colors.END}")
+                    continue
                     
+                elif user_input.lower().startswith('view '): # New command to view file content
+                    filename = user_input[5:].strip()
+                    content = self._read_file_content(filename)
+                    if content is not None:
+                        print(f"\n{Colors.CYAN}Content of '{filename}':{Colors.END}")
+                        print("-" * 50)
+                        print(content)
+                        print("-" * 50)
+                    continue
+
+                elif user_input.lower().startswith('open '): # New command to open file with default app
+                    filename = user_input[5:].strip()
+                    self._open_file_with_default_app(filename)
+                    continue
+
                 elif user_input.startswith('cd '):
                     self._handle_cd(user_input[3:].strip()) # Handle change directory
                     continue
@@ -721,13 +1075,13 @@ Current OS-specific command syntax:
                     if self.config.get('auto_execute', False):
                         # Auto-execute if enabled in config
                         output, success = self._execute_command(parsed['command'])
-                        print(output)
+                        print(output) # Print output directly here
                     else:
                         # Prompt for confirmation before executing
                         confirm = input(f"\nExecute command? {Colors.YELLOW}{parsed['command']}{Colors.END} [Y/n]: ")
                         if confirm.lower() != 'n':
                             output, success = self._execute_command(parsed['command'])
-                            print(output)
+                            print(output) # Print output directly here
                         else:
                             print(f"{Colors.YELLOW}Command execution skipped.{Colors.END}")
                             
@@ -747,7 +1101,8 @@ Current OS-specific command syntax:
                             if parsed['filename'].lower().endswith(('.py', '.js', '.sh', '.ps1')):
                                 run_confirm = input(f"Run {parsed['filename']}? [y/N]: ")
                                 if run_confirm.lower() == 'y':
-                                    self._run_code_file(parsed['filename'])
+                                    # Pass code_content to _run_code_file for potential debugging
+                                    self._run_code_file(parsed['filename'], parsed['code'])
                             else:
                                 print(f"{Colors.YELLOW}File saved. Not a recognized executable script type for direct running.{Colors.END}")
                         else:
@@ -796,6 +1151,9 @@ Current OS-specific command syntax:
         print(f"  {Colors.GREEN}exit / quit{Colors.END} - Exit the Bash.ai assistant.")
         print(f"  {Colors.GREEN}clear{Colors.END}     - Clear the terminal screen.")
         print(f"  {Colors.GREEN}cd <path>{Colors.END} - Change the current working directory.")
+        print(f"  {Colors.GREEN}list{Colors.END}      - List contents of the current directory.")
+        print(f"  {Colors.GREEN}view <file>{Colors.END} - Display content of a specified file.")
+        print(f"  {Colors.GREEN}open <file/dir>{Colors.END} - Open a file or directory with its default application.")
         print(f"  {Colors.GREEN}config{Colors.END}    - Show current configuration settings.")
         print(f"  {Colors.GREEN}login{Colors.END}     - Authenticate with Supabase (for full features).")
         print(f"\n{Colors.BOLD}AI Interaction:{Colors.END}")
@@ -804,24 +1162,29 @@ Current OS-specific command syntax:
         print(f"  - \"create a backup script for my documents\"")
         print(f"  - \"how to check disk usage?\"")
         print(f"\n{Colors.YELLOW}Note: Commands suggested by AI will prompt for confirmation unless auto-execute is enabled.{Colors.END}")
+        print(f"{Colors.YELLOW}New: If generated code or commands fail, Bash.ai can attempt to debug it with AI assistance.{Colors.END}")
+
 
     def _show_config(self):
         """Displays the current configuration."""
         print(f"\n{Colors.BOLD}Current Bash.ai Configuration:{Colors.END}")
         for key, value in self.config.items():
-            if key in ["supabase_anon_key_public", "jwt_token"] and value:
-                # Censor sensitive public keys or JWTs for display
+            if key == "jwt_token" and value:
                 display_value = f"{value[:10]}...[TRUNCATED]"
             else:
                 display_value = value
             print(f"  {Colors.GREEN}{key.replace('_', ' ').title()}:{Colors.END} {display_value}")
         print(f"\nConfiguration file located at: {CONFIG_PATH}")
+        print(f"\n{Colors.BOLD}Hardcoded Supabase Public Details (in bashai.py):{Colors.END}")
+        print(f"  {Colors.GREEN}Supabase URL Public:{Colors.END} {SUPABASE_URL_PUBLIC}")
+        print(f"  {Colors.GREEN}Supabase Anon Key Public:{Colors.END} {SUPABASE_ANON_KEY_PUBLIC[:10]}...[TRUNCATED]")
 
 
 def main():
     """
     Main entry point for the Bash.ai client application.
     Handles command-line arguments and starts the interactive mode or single command execution.
+
     """
     parser = argparse.ArgumentParser(description="Bash.ai - AI Terminal Assistant")
     # Argument to specify AI server URL, overrides config
@@ -829,25 +1192,19 @@ def main():
     # Argument to show current configuration
     parser.add_argument('--config', '-c', help='Show current configuration and exit', action='store_true')
     # Argument to force configuration prompt (for first-time setup or re-configuration)
-    parser.add_argument('--configure', help='Force interactive configuration prompt', action='store_true')
+    parser.add_argument('--configure', help='Force interactive configuration prompt (currently just saves existing config)', action='store_true')
     # Positional argument for single command execution
     parser.add_argument('command', nargs='*', help='Command to execute directly (e.g., "bashai list files")')
     
     args = parser.parse_args()
     
-    # Initialize BashAI. If --configure is used, it will force the config prompt.
-    # The server_url from args will take precedence if provided.
     ai = BashAI(server_url=args.server)
 
-    # If --configure is used, force the configuration prompt and exit
+    # If --configure is used, just save the current config to disk
+    # This acts as a "refresh" or "write defaults if not exist" behavior
     if args.configure:
-        # Pass existing config to prompt so it can be updated
-        # _prompt_for_config is not really an interactive prompt anymore,
-        # but a way to refresh/save the config based on defaults + args.
-        # This part might need to be adjusted based on desired `--configure` behavior.
-        # For now, it will just re-save the current configuration.
         ai._save_config(ai.config) 
-        print(f"{Colors.GREEN}Configuration refreshed based on defaults and arguments.{Colors.END}")
+        print(f"{Colors.GREEN}Configuration refreshed/saved based on defaults and arguments.{Colors.END}")
         return
     
     if args.config:
