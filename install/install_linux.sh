@@ -20,7 +20,10 @@ fi
 # Check for pip3
 if ! command -v pip3 &> /dev/null; then
     echo "Error: pip3 (Python 3 package installer) not found. Installing it now..."
-    sudo apt-get install python3-pip || sudo yum install python3-pip || sudo dnf install python3-pip || echo "Could not install pip3 automatically. Please install it manually."
+    sudo apt-get install -y python3-pip || sudo yum install python3-pip || sudo dnf install python3-pip || {
+        echo "Could not install pip3 automatically. Please install it manually."
+        exit 1
+    }
     if ! command -v pip3 &> /dev/null; then
         echo "Error: pip3 still not found. Please install pip3 manually and re-run this script."
         exit 1
@@ -80,7 +83,32 @@ else
     exit 1
 fi
 
+# Create a wrapper script to run bashai with the virtual environment
+BASH_AI_SCRIPT="/usr/local/bin/bashai"
+if [ ! -w "/usr/local/bin" ]; then
+    BASH_AI_SCRIPT="$HOME/.local/bin/bashai"
+    mkdir -p "$HOME/.local/bin"
+    # Add ~/.local/bin to PATH if not already present
+    if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+        echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
+        export PATH="$HOME/.local/bin:$PATH"
+    fi
+fi
+
+# Assume bashai's main script is bashai.py in the current directory
+# Adjust this if the actual entry point is different
+cat > "$BASH_AI_SCRIPT" << EOL
+#!/bin/bash
+source "$VENV_DIR/bin/activate"
+python3 "$(pwd)/bashai.py" "\$@"
+deactivate
+EOL
+
+chmod +x "$BASH_AI_SCRIPT"
+echo "Created bashai command at $BASH_AI_SCRIPT"
+
 # Deactivate the virtual environment
 deactivate
 
 echo "Bash.ai installation completed successfully!"
+echo "You can now run 'bashai' from the terminal to start the application."
