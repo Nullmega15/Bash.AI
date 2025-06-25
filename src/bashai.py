@@ -39,7 +39,7 @@ CONFIG_PATH = Path.home() / ".bashai_config.json"
 # --- Hardcoded Defaults (User-Friendly) ---
 # These are the *default* values. Users can still override the server URL with --server.
 # The Supabase public URL and Anon Key are safe to be in client code.
-DEFAULT_SERVER_URL = "http://localhost:8000/" # Default AI server URL
+DEFAULT_SERVER_URL = "http://84.247.164.54:8000/" # Default AI server URL
 
 # IMPORTANT: Replace these with your actual Supabase Project URL and Anon Key.
 # It's recommended to set them as environment variables (e.g., in your shell profile)
