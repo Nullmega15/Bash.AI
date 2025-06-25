@@ -39,7 +39,7 @@ CONFIG_PATH = Path.home() / ".bashai_config.json"
 # --- Hardcoded Defaults (User-Friendly) ---
 # These are the *default* values. Users can still override the server URL with --server.
 # The Supabase public URL and Anon Key are safe to be in client code.
-DEFAULT_SERVER_URL = "http://84.247.164.54:8000/" # Default AI server URL
+DEFAULT_SERVER_URL = "http://localhost:8000/" # Default AI server URL
 
 # IMPORTANT: Replace these with your actual Supabase Project URL and Anon Key.
 # It's recommended to set them as environment variables (e.g., in your shell profile)
@@ -65,11 +65,8 @@ class Colors:
     @classmethod
     def disable_on_windows(cls):
         """
-
         Disable ANSI colors on older Windows versions that don't support them.
-
         Newer Windows 10/11 terminals support ANSI colors by default.
-
         """
         if platform.system() == "Windows":
             try:
@@ -78,8 +75,21 @@ class Colors:
             except:
                 # Fallback: disable colors by setting all color attributes to empty strings
                 for attr in dir(cls):
-                    if not attr.startswith('_') and attr != 'disable_on_windows':
+                    if not attr.startswith('_') and attr != 'disable_on_windows' and attr != 'wrap_for_readline':
                         setattr(cls, attr, '')
+
+    @staticmethod
+    def wrap_for_readline(text_with_ansi: str) -> str:
+        """
+        Wraps ANSI escape codes with \001 (start) and \002 (end) markers
+        for readline to correctly calculate string width, preventing wrapping issues.
+        Only applies if readline is available.
+        """
+        if readline:
+            # This regex finds ANSI escape sequences (e.g., \x1b[...m)
+            # and wraps them with readline's non-printable markers.
+            return re.sub(r'\x1b\[[0-9;]*m', r'\001\g<0>\002', text_with_ansi)
+        return text_with_ansi
 
 # Initialize colors (disable if necessary for compatibility)
 Colors.disable_on_windows()
@@ -103,7 +113,9 @@ class Spinner:
         while not self.stop_running:
             char = self.spinner_chars[i % len(self.spinner_chars)]
             # Use carriage return '\r' to overwrite the current line
-            sys.stdout.write(f"\r{Colors.CYAN}{char}{Colors.END} {self.message}... ")
+            # Ensure the output uses readline-compatible wrapping if readline is active
+            display_text = Colors.wrap_for_readline(f"\r{Colors.CYAN}{char}{Colors.END} {self.message}... ")
+            sys.stdout.write(display_text)
             sys.stdout.flush() # Ensure the output is immediately visible
             time.sleep(0.1) # Control the speed of the spinner
             i += 1
@@ -122,7 +134,6 @@ class Spinner:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """
-
         Context manager exit point. Stops the spinner thread and waits for it to finish.
         """
         self.stop_running = True
@@ -170,7 +181,6 @@ class BashAI:
 
     def _init_supabase(self):
         """
-
         Initializes the Supabase client and attempts to authenticate the user.
         """
         if SUPABASE_URL_PUBLIC == "YOUR_SUPABASE_URL_PUBLIC_HERE" or SUPABASE_ANON_KEY_PUBLIC == "YOUR_SUPABASE_ANON_KEY_PUBLIC_HERE":
@@ -203,7 +213,6 @@ class BashAI:
         """
         if not self.supabase_client:
             print(f"{Colors.RED}Supabase client not initialized. Cannot authenticate.{Colors.END}")
-
             return
 
         print(f"\n{Colors.BOLD}┌──────────────────────────────────────────────┐{Colors.END}")
@@ -298,7 +307,6 @@ class BashAI:
 
     def _save_config(self, config_data: Dict):
         """
-
         Saves the provided configuration dictionary to the CONFIG_PATH.
         """
         try:
@@ -313,7 +321,6 @@ class BashAI:
 
     def _get_os_and_shell_info(self) -> Dict[str, str]:
         """
-
         Detects the current operating system and the active shell.
         Returns a dictionary with 'os' and 'shell' keys.
         """
@@ -351,7 +358,6 @@ class BashAI:
         """
         Gets a formatted string of the current directory's contents.
         Lists files and directories separately.
-
         """
         try:
             items = os.listdir(self.current_dir)
@@ -454,7 +460,6 @@ class BashAI:
     def _query_ai(self, message: str, system_prompt: str = None) -> Tuple[str, bool]:
         """
         Sends a query to the AI server and retrieves the response, including JWT.
-
         """
         headers = {
             "Content-Type": "application/json",
@@ -508,7 +513,6 @@ class BashAI:
 
     def _execute_command(self, cmd: str, show_command: bool = True) -> Tuple[str, bool]:
         """
-
         Executes a system command safely. This function is for short-lived commands
         where the full output is expected at once. Includes AI-powered debugging on failure.
         """
@@ -526,17 +530,11 @@ class BashAI:
         try:
             with Spinner("Running"): # Show spinner while command executes
                 # Use appropriate shell based on OS for subprocess execution
-                shell = True # Let the OS shell interpret the command
-                
-                if self.is_windows:
-                    result = subprocess.run(
-                        cmd, shell=shell, capture_output=True, text=True,
-                        creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
-                    )
-                else:
-                    result = subprocess.run(
-                        cmd, shell=shell, capture_output=True, text=True
-                    )
+                # Use text=True and universal_newlines=True to handle text streams directly
+                result = subprocess.run(
+                    cmd, shell=True, capture_output=True, text=True,
+                    creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+                )
                 
                 if result.returncode == 0:
                     output = result.stdout.strip() if result.stdout else "✓ Command completed successfully"
@@ -563,7 +561,6 @@ class BashAI:
 
     def _create_file(self, filename: str, content: str) -> bool:
         """
-
         Creates a file with the given content.
         """
         try:
@@ -598,7 +595,9 @@ Strict Guidelines for your responses:
     Example (for Windows/powershell): `<execute>Get-ChildItem -Force</execute>`
     Example (for Windows/cmd): `<execute>dir /w</execute>`
 2.  **For Code Generation (Scripts, Programs, etc.)**: If the user asks for code, you **MUST** provide the complete, runnable code inside `<filename>name.ext</filename><code>full_code_here</code>` tags. **DO NOT** provide code outside these tags, as the client will not be able to process it as a file. The `name.ext` should be a sensible filename including the appropriate extension (e.g., `script.py`, `my_app.js`, `backup.sh`).
-    Example: `<filename>hello.py</filename><code>print("Hello, world!")</code>`
+    **IMPORTANT**: If the generated code has external dependencies (e.g., Python packages like 'flask', Node.js modules like 'express'), you **MUST** also include an `<dependencies>` tag *before* the `<filename><code>` tags. This tag should contain the exact command to install these dependencies (e.g., `pip install flask requests`, `npm install express`). If there are multiple commands, separate them with `&&`. If there are no dependencies, omit this tag.
+    Example with dependencies: `<dependencies>pip install flask</dependencies><filename>website.py</filename><code>from flask import Flask\n...</code>`
+    Example without dependencies: `<filename>hello.py</filename><code>print("Hello, world!")</code>`
 3.  **For Debugging Code Errors**: If you are provided with code and an error message, provide EITHER:
     * An `<execute>` command to fix it (e.g., install a missing package).
     * The corrected code within `<filename>...</filename><code>...</code>` tags.
@@ -611,22 +610,32 @@ Strict Guidelines for your responses:
     **CRITICAL**: If your suggested fix is a command, it MUST be inside `<execute>` tags.
 5.  **For Explanations/Conversational Responses**: If the request is not for a command or code, just provide the explanation text directly. Do NOT use any special tags.
 
-**Failure to follow these formatting rules for commands and code will result in the client not being able to understand and process your response correctly.**
+**Failure to follow these formatting rules for commands and code (including dependencies) will result in the client not being able to understand and process your response correctly.**
 """
 
     def _parse_ai_response(self, response: str) -> Dict:
         """
         Parses the AI's response to identify if it's a command, code, or an explanation.
         Prioritizes <execute> tags, then markdown code blocks for commands, then code tags.
+        Also extracts <dependencies> tags.
         """
         result = {
             'type': 'explanation',
             'content': response, # Default to full response as explanation
             'command': None,
             'filename': None,
-            'code': None
+            'code': None,
+            'dependencies': None # New field for dependencies
         }
         
+        # --- 0. Check for <dependencies> tags first (can be present with code) ---
+        dependencies_pattern = re.compile(r'<dependencies>(.*?)</dependencies>', re.DOTALL)
+        deps_match = dependencies_pattern.search(response)
+        if deps_match:
+            result['dependencies'] = deps_match.group(1).strip()
+            # Remove dependencies tag from response so it doesn't interfere with other parsing
+            response = dependencies_pattern.sub('', response)
+
         # --- 1. Check for <execute> tags (Highest Priority for commands) ---
         if '<execute>' in response and '</execute>' in response:
             start = response.find('<execute>') + len('<execute>')
@@ -671,26 +680,27 @@ Strict Guidelines for your responses:
         """
         Helper function to read lines from a subprocess stream (stdout/stderr)
         and print them in real-time, also collecting them into a list.
+        Reads as bytes and decodes to avoid buffering warnings.
         """
-        # Readline by readline to ensure real-time output
         for line_bytes in iter(stream.readline, b''):
             try:
+                # Decode the bytes to string using the system's preferred encoding
                 line_str = line_bytes.decode(sys.stdout.encoding, errors='replace').strip()
                 output_list.append(line_str)
-                sys.stdout.write(line_str + '\n') # Add newline back for proper display
-                sys.stdout.flush()
+                # Write to stdout buffer directly to avoid issues with Python's text buffering
+                sys.stdout.buffer.write((line_str + '\n').encode(sys.stdout.encoding, errors='replace'))
+                sys.stdout.buffer.flush()
             except Exception as e:
-                # Log decoding errors but don't stop the process
-                sys.stderr.write(f"Error decoding stream: {e}\n")
-                sys.stderr.flush()
+                sys.stderr.buffer.write(f"Error decoding stream: {e}\n".encode(sys.stderr.encoding, errors='replace'))
+                sys.stderr.buffer.flush()
         stream.close() # Ensure stream is closed when done
 
-    def _run_code_file(self, filename: str, code_content: str) -> bool:
+    def _run_code_file(self, filename: str, code_content: str, dependencies_cmd: Optional[str] = None) -> bool:
         """
         Attempts to run a generated code file based on its extension,
         displaying output in real-time and allowing the user to stop execution.
-
         Includes AI-powered debugging on failure.
+        Now also handles proactive dependency installation.
         """
         runners = {
             '.py': 'python',
@@ -707,6 +717,26 @@ Strict Guidelines for your responses:
             print(f"{Colors.YELLOW}You may need to run it manually.{Colors.END}")
             return False
 
+        # --- Proactive Dependency Installation ---
+        if dependencies_cmd:
+            print(f"\n{Colors.BLUE}Dependencies suggested: {dependencies_cmd}{Colors.END}")
+            confirm_install = input(f"Install these dependencies before running '{filename}'? [Y/n]: ").strip().lower()
+            if confirm_install != 'n':
+                print(f"{Colors.CYAN}Attempting to install dependencies...{Colors.END}")
+                install_output, install_success = self._execute_command(dependencies_cmd, show_command=True)
+                print(install_output)
+                if not install_success:
+                    print(f"{Colors.RED}Dependency installation failed. Attempting to run code anyway, but it might fail.{Colors.END}")
+                    confirm_proceed = input("Proceed to run code despite dependency installation failure? [y/N]: ").strip().lower()
+                    if confirm_proceed != 'y':
+                        print(f"{Colors.YELLOW}Code execution aborted due to failed dependency installation.{Colors.END}")
+                        return False
+                else:
+                    print(f"{Colors.GREEN}Dependencies installed successfully.{Colors.END}")
+            else:
+                print(f"{Colors.YELLOW}Dependency installation skipped. Proceeding to run code (may fail).{Colors.END}")
+
+
         # Split the runner command string into parts for subprocess.Popen
         # This handles cases like 'powershell.exe -ExecutionPolicy Bypass -File' correctly
         command_parts = runner_command_str.split() + [filename]
@@ -722,15 +752,13 @@ Strict Guidelines for your responses:
         stderr_lines = []
 
         try:
-            # Start the subprocess
+            # Popen with text=False to read as bytes, then decode in threads
             process = subprocess.Popen(
                 command_parts,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=False, # We will decode manually in the thread
-                bufsize=1, # Line-buffered output
-                universal_newlines=False, # We handle decoding
-                # Prevents a new console window from popping up on Windows
+                text=False, # Important: Set to False to read binary streams
+                bufsize=1, # Line-buffered for performance with binary streams (Python decodes lines)
                 creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
             )
 
@@ -818,10 +846,8 @@ Strict Guidelines for your responses:
 
     def _debug_code_error(self, filename: str, code_content: str, error_message: str) -> bool:
         """
-
         Interacts with the AI to debug a code execution error.
         Returns True if fixed and successfully re-run, False otherwise.
-
         """
         DEBUG_ATTEMPTS = 2 # Limit debugging attempts
 
@@ -862,9 +888,9 @@ Strict Guidelines for your responses:
                         rerun_choice = input(f"Attempt to re-run '{filename}' after applying fix? [y/N]: ").strip().lower()
                         if rerun_choice == 'y':
                             print(f"{Colors.CYAN}Re-running original code after fix...{Colors.END}")
-                            # Directly re-execute the original code and check for success
-                            if self._execute_code_after_fix(filename, code_content):
-
+                            # Correctly call _run_code_file (not _execute_code_after_fix)
+                            # Pass original code_content as that's what we're fixing for
+                            if self._run_code_file(filename, code_content): # No deps needed on rerun as they should be installed
                                 return True # Successfully fixed and re-ran
                             else:
                                 print(f"{Colors.YELLOW}Re-run failed even after fix. Trying next debug attempt if available.{Colors.END}")
@@ -891,7 +917,7 @@ Strict Guidelines for your responses:
                         rerun_choice = input(f"Attempt to re-run '{filename}' with corrected code? [y/N]: ").strip().lower()
                         if rerun_choice == 'y':
                             print(f"{Colors.CYAN}Re-running code with AI-suggested corrections...{Colors.END}")
-                            if self._execute_code_after_fix(filename, fixed_code): # Re-run with new content
+                            if self._run_code_file(filename, fixed_code): # Re-run with new content
                                 return True # Successfully fixed and re-ran
                             else:
                                 print(f"{Colors.YELLOW}Re-run failed even with corrected code. Trying next debug attempt if available.{Colors.END}")
@@ -958,13 +984,9 @@ Strict Guidelines for your responses:
                 confirm_exec = input("Execute this suggested command? [y/N]: ").strip().lower()
                 if confirm_exec == 'y':
                     output, exec_success = self._execute_command(suggested_command, show_command=True)
-                    print(output)
-                    if exec_success:
-                        print(f"{Colors.GREEN}Command debugging successful!{Colors.END}")
-                        return output, True # Command fixed and successfully executed
-                    else:
-                        print(f"{Colors.YELLOW}Suggested command failed again. Trying next debug attempt if available.{Colors.END}")
-                        # Loop will continue to next attempt
+                    # Note: We do not recursively call _debug_command_error here,
+                    # the _execute_command call itself can trigger its own debug prompt if it fails.
+                    return output, exec_success # Return the result of the new command execution
                 else:
                     print(f"{Colors.YELLOW}Suggested command execution skipped by user.{Colors.END}")
                     return f"{Colors.YELLOW}Command debugging skipped by user.{Colors.END}", False # User opted out
@@ -1002,7 +1024,10 @@ Strict Guidelines for your responses:
         while True:
             try:
                 # Construct the prompt for the user
-                prompt = f"{Colors.GREEN}bash.ai{Colors.END} {Colors.BLUE}{os.path.basename(self.current_dir)}{Colors.END}> "
+                # Apply readline-specific wrapping to the prompt string
+                prompt = Colors.wrap_for_readline(
+                    f"{Colors.GREEN}bash.ai{Colors.END} {Colors.BLUE}{os.path.basename(self.current_dir)}{Colors.END}> "
+                )
                 
                 # Get user input. input() itself handles the readline integration if available.
                 user_input = input(prompt).strip()
@@ -1101,8 +1126,8 @@ Strict Guidelines for your responses:
                             if parsed['filename'].lower().endswith(('.py', '.js', '.sh', '.ps1')):
                                 run_confirm = input(f"Run {parsed['filename']}? [y/N]: ")
                                 if run_confirm.lower() == 'y':
-                                    # Pass code_content to _run_code_file for potential debugging
-                                    self._run_code_file(parsed['filename'], parsed['code'])
+                                    # Pass code_content and new dependencies to _run_code_file for proactive install
+                                    self._run_code_file(parsed['filename'], parsed['code'], parsed['dependencies'])
                             else:
                                 print(f"{Colors.YELLOW}File saved. Not a recognized executable script type for direct running.{Colors.END}")
                         else:
@@ -1163,6 +1188,7 @@ Strict Guidelines for your responses:
         print(f"  - \"how to check disk usage?\"")
         print(f"\n{Colors.YELLOW}Note: Commands suggested by AI will prompt for confirmation unless auto-execute is enabled.{Colors.END}")
         print(f"{Colors.YELLOW}New: If generated code or commands fail, Bash.ai can attempt to debug it with AI assistance.{Colors.END}")
+        print(f"{Colors.YELLOW}New: Bash.ai can now proactively offer to install dependencies for generated code.{Colors.END}")
 
 
     def _show_config(self):
@@ -1184,7 +1210,6 @@ def main():
     """
     Main entry point for the Bash.ai client application.
     Handles command-line arguments and starts the interactive mode or single command execution.
-
     """
     parser = argparse.ArgumentParser(description="Bash.ai - AI Terminal Assistant")
     # Argument to specify AI server URL, overrides config
@@ -1227,6 +1252,9 @@ def main():
                 # In single command mode, just print code, don't save/run automatically
                 print(f"\n{Colors.PURPLE}Generated code for: {parsed['filename']}{Colors.END}")
                 print(parsed['code'])
+                # If there are dependencies in single command mode, also print them
+                if parsed['dependencies']:
+                    print(f"\n{Colors.YELLOW}Suggested dependencies: {parsed['dependencies']}{Colors.END}")
             else:
                 # Print explanation
                 print(ai_response)
