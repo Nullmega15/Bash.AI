@@ -41,7 +41,7 @@ if ! python3 -m venv "$VENV_TEST_DIR" &> /dev/null; then
     # Check again after installation attempt
     if ! python3 -m venv "$VENV_TEST_DIR" &> /dev/null; then
         echo "Error: Failed to create virtual environment after installing python3-venv. Please install python3-venv manually."
-        echo "Example: sudo apt-get install python3-venv python3.12-venv (for Debian/Ubuntu)"
+        echo "Example: sudo apt-get install python3-venv python3.12-venv (Debian/Ubuntu)"
         rm -rf "$VENV_TEST_DIR"
         exit 1
     fi
@@ -54,7 +54,7 @@ VENV_DIR="$HOME/.bash_ai_venv"
 echo "Creating virtual environment in $VENV_DIR..."
 if ! python3 -m venv "$VENV_DIR"; then
     echo "Error: Failed to create virtual environment. Ensure python3-venv is installed."
-    echo "Example: sudo apt-get install python3-venv python3.12-venv (for Debian/Ubuntu)"
+    echo "Example: sudo apt-get install python3-venv python3.12-venv (Debian/Ubuntu)"
     exit 1
 fi
 
@@ -95,12 +95,11 @@ if [ ! -w "/usr/local/bin" ]; then
     fi
 fi
 
-# Assume bashai's main script is bashai.py in the current directory
-# Adjust this if the actual entry point is different
+# Use src/bashai.py as the entry point
 cat > "$BASH_AI_SCRIPT" << EOL
 #!/bin/bash
 source "$VENV_DIR/bin/activate"
-python3 "$(pwd)/bashai.py" "\$@"
+python3 "$(pwd)/src/bashai.py" "\$@"
 deactivate
 EOL
 
