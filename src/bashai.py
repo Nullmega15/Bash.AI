@@ -12,7 +12,7 @@ import platform
 import argparse
 import requests
 from pathlib import Path
-from typing import Tuple, Dict, Optional, List
+from typing import Tuple, Dict, Optional, List, Any
 from threading import Thread
 import time
 import signal
@@ -35,7 +35,6 @@ except ImportError:
 # Configuration paths and defaults
 # This configuration file will store the server URL, Supabase URL, and other settings
 CONFIG_PATH = Path.home() / ".bashai_config.json"
-
 
 DEFAULT_SERVER_URL = "http://84.247.164.54:8000/" # Default AI server URL
 
@@ -135,7 +134,7 @@ class Spinner:
         if self.thread:
             self.thread.join(timeout=0.5) # Give a short time for the thread to clean up
         # Clear the line where the spinner was after it stops
-        sys.stdout.write("\r" + " " * (len(self.message) + 10) + "\r")
+        sys.stdout.write("\r" + " " * (os.get_terminal_size().columns) + "\r")
         sys.stdout.flush()
 
 
@@ -620,102 +619,108 @@ Strict Guidelines for your responses:
     Example (for Linux/bash): `<execute>ls -l</execute>`
     Example (for Windows/powershell): `<execute>Get-ChildItem -Force</execute>`
     Example (for Windows/cmd): `<execute>dir /w</execute>`
-2.  **For Code Generation (New Files)**: If the user asks for new code (e.g., a script, a program to be created), you **MUST** provide the complete, runnable code inside `<filename>name.ext</filename><code>full_code_here</code>` tags. **DO NOT** provide code outside these tags. The `name.ext` should be a sensible filename including the appropriate extension (e.g., `script.py`, `my_app.js`, `backup.sh`).
+2.  **For Code Generation (New Files - Single)**: If the user asks for a single new code file, you **MUST** provide the complete, runnable code inside `<filename>name.ext</filename><code>full_code_here</code>` tags. **DO NOT** provide code outside these tags. The `name.ext` should be a sensible filename including the appropriate extension (e.g., `script.py`, `my_app.js`, `backup.sh`).
     **IMPORTANT**: If the generated code has external dependencies (e.g., Python packages like 'flask', Node.js modules like 'express'), you **MUST** also include an `<dependencies>` tag *before* the `<filename><code>` tags. This tag should contain the exact command to install these dependencies (e.g., `pip install flask requests`, `npm install express`). If there are multiple commands, separate them with `&&`. If there are no dependencies, omit this tag.
     Example with dependencies: `<dependencies>pip install flask</dependencies><filename>website.py</filename><code>from flask import Flask\n...</code>`
     Example without dependencies: `<filename>hello.py</filename><code>print("Hello, world!")</code>`
-3.  **For Editing Existing Files (User uses 'edit' command)**: If the user explicitly asks you to `edit <filename> <instruction>`, you **MUST** provide the *entire, revised content* of that file inside `<edited_filename>filename.ext</edited_filename><edited_code>new_full_content</edited_code>` tags. You will be provided with the current content of the file in the prompt. **DO NOT** provide partial code. **DO NOT** use `<filename><code>` for edits.
+3.  **For Code Generation (New Files - Multiple)**: If the user asks for multiple new files (e.g., a website with HTML and Python server), you **MUST** wrap all file definitions within a single `<files>...</files>` block. Inside this, each file **MUST** be defined using a `<file><filename>NAME.EXT</filename><code>FULL_CODE</code></file>` block. **DO NOT** use `<filename><code>` outside a `<files>` block for multiple files.
+    **IMPORTANT**: If *any* of these generated files have external dependencies, provide a single `<dependencies>` tag *before* the `<files>` block, containing all necessary installation commands (e.g., `pip install flask && npm install express`). If no dependencies for any file, omit this tag.
+    **CRITICAL**: If the user's request implies starting a server or running one of the generated files (e.g., "host it on a python server"), include an `<execute>` command *after* the `</files>` tag.
+    Example (Multiple Files with dependencies and execute):
+    `<dependencies>pip install flask</dependencies>`
+    `<files>`
+    `<file><filename>index.html</filename><code><!DOCTYPE html>...</code></file>`
+    `<file><filename>server.py</filename><code>from flask import Flask...</code></file>`
+    `</files>`
+    `<execute>python server.py</execute>`
+4.  **For Editing Existing Files (User uses 'edit' command)**: If the user explicitly asks you to `edit <filename> <instruction>`, you **MUST** provide the *entire, revised content* of that file inside `<edited_filename>filename.ext</edited_filename><edited_code>new_full_content</edited_code>` tags. You will be provided with the current content of the file in the prompt. **DO NOT** provide partial code. **DO NOT** use `<filename><code>` for edits.
     Example for editing `my_script.py`: `<edited_filename>my_script.py</edited_filename><edited_code># This is the full, revised content of my_script.py\nprint("Hello from edited script!")</edited_code>`
-4.  **For Debugging Code Errors**: If you are provided with code and an error message, provide EITHER:
+5.  **For Debugging Code Errors**: If you are provided with code and an error message, provide EITHER:
     * An `<execute>` command to fix it (e.g., install a missing package).
     * The corrected code within `<filename>...</filename><code>...</code>` tags.
     * An explanation if no direct fix can be provided (without special tags).
     **CRITICAL**: If your suggested fix involves code, it MUST be inside `<filename><code>` tags.
-5.  **For Debugging Command Errors**: If you are provided with a command and its error message (from stderr), provide EITHER:
+6.  **For Debugging Command Errors**: If you are provided with a command and its error message (from stderr), provide EITHER:
     * A corrected `<execute>` command.
     * An `<execute>` command to install a missing tool.
     * An explanation if no direct fix can be provided (without special tags).
     **CRITICAL**: If your suggested fix is a command, it MUST be inside `<execute>` tags.
-6.  **For Explanations/Conversational Responses**: If the request is not for a command or code, just provide the explanation text directly. Do NOT use any special tags.
+7.  **For Explanations/Conversational Responses**: If the request is not for a command or code, just provide the explanation text directly. Do NOT use any special tags.
 
 **Failure to follow these formatting rules for commands and code (including dependencies and edits) will result in the client not being able to understand and process your response correctly.**
 """
 
-    def _parse_ai_response(self, response: str) -> Dict:
+    def _parse_ai_response(self, response: str) -> Dict[str, Any]:
         """
-        Parses the AI's response to identify if it's a command, code (new or edited), or an explanation.
-        Prioritizes <execute> tags, then edited code, then new code, then markdown commands.
-        Also extracts <dependencies> tags.
+        Parses the AI's response to extract all structured components.
+        Returns a dictionary with 'command', 'new_files', 'edited_file', 'dependencies', 'explanation' keys.
         """
-        result = {
-            'type': 'explanation',
-            'content': response, # Default to full response as explanation
+        parsed_components: Dict[str, Any] = {
             'command': None,
-            'filename': None, # For new files
-            'code': None,      # For new files
-            'edited_filename': None, # For edited files
-            'edited_code': None,     # For edited files
-            'dependencies': None # For new code dependencies
+            'new_files': [], # List of {'filename': '...', 'code': '...'}
+            'edited_file': None, # {'filename': '...', 'code': '...'}
+            'dependencies': None,
+            'explanation': response.strip() # Default to full response as explanation
         }
-        
-        # --- 0. Check for <dependencies> tags (can be present with new code) ---
+
+        # Regex patterns for the different tags
         dependencies_pattern = re.compile(r'<dependencies>(.*?)</dependencies>', re.DOTALL)
-        deps_match = dependencies_pattern.search(response)
+        execute_pattern = re.compile(r'<execute>(.*?)</execute>', re.DOTALL)
+        files_block_pattern = re.compile(r'<files>(.*?)</files>', re.DOTALL)
+        single_file_pattern = re.compile(r'<filename>(.*?)</filename><code>(.*?)</code>', re.DOTALL)
+        edited_file_pattern = re.compile(r'<edited_filename>(.*?)</edited_filename><edited_code>(.*?)</edited_code>', re.DOTALL)
+        
+        remaining_response = response.strip()
+
+        # 1. Extract Dependencies
+        deps_match = dependencies_pattern.search(remaining_response)
         if deps_match:
-            result['dependencies'] = deps_match.group(1).strip()
-            # Remove dependencies tag from response so it doesn't interfere with other parsing
-            response = dependencies_pattern.sub('', response)
+            parsed_components['dependencies'] = deps_match.group(1).strip()
+            remaining_response = dependencies_pattern.sub('', remaining_response, 1).strip() # Remove first match
 
-        # --- 1. Check for <execute> tags (Highest Priority for commands) ---
-        if '<execute>' in response and '</execute>' in response:
-            start = response.find('<execute>') + len('<execute>')
-            end = response.find('</execute>')
-            if start < end:
-                result['type'] = 'command'
-                result['command'] = response[start:end].strip()
-                return result # Return immediately if explicit execute tag found
+        # 2. Extract Files Block (for multiple new files)
+        files_block_match = files_block_pattern.search(remaining_response)
+        if files_block_match:
+            files_content = files_block_match.group(1)
+            # Find all individual <file> blocks within the <files> content
+            individual_file_pattern = re.compile(r'<file>\s*<filename>(.*?)</filename>\s*<code>(.*?)</code>\s*</file>', re.DOTALL)
+            for file_match in individual_file_pattern.finditer(files_content):
+                filename = file_match.group(1).strip()
+                code = file_match.group(2).strip()
+                parsed_components['new_files'].append({'filename': filename, 'code': code})
+            
+            remaining_response = files_block_pattern.sub('', remaining_response, 1).strip() # Remove first match
 
-        # --- 2. Check for <edited_filename> and <edited_code> tags (for editing existing files) ---
-        if '<edited_filename>' in response and '<edited_code>' in response:
-            filename_start = response.find('<edited_filename>') + len('<edited_filename>')
-            filename_end = response.find('</edited_filename>')
-            code_start = response.find('<edited_code>') + len('<code>') # Note: using <code> as length for simplicity, ensures it's past the tag
-            code_end = response.find('</edited_code>')
+        # 3. Extract Edited File (for modifications to existing files) - takes precedence over single new file if both present somehow
+        edited_file_match = edited_file_pattern.search(remaining_response)
+        if edited_file_match:
+            parsed_components['edited_file'] = {
+                'filename': edited_file_match.group(1).strip(),
+                'code': edited_file_match.group(2).strip()
+            }
+            remaining_response = edited_file_pattern.sub('', remaining_response, 1).strip() # Remove first match
 
-            if filename_start < filename_end and code_start < code_end:
-                result['type'] = 'edited_code'
-                result['edited_filename'] = response[filename_start:filename_end].strip()
-                result['edited_code'] = response[code_start:code_end].strip()
-                return result # Return if explicit edited code tag found
+        # 4. Extract Single New File (if no multi-file block was found)
+        # Check only if new_files is empty and no edited_file was found
+        if not parsed_components['new_files'] and not parsed_components['edited_file']:
+            single_file_match = single_file_pattern.search(remaining_response)
+            if single_file_match:
+                parsed_components['new_files'].append({
+                    'filename': single_file_match.group(1).strip(),
+                    'code': single_file_match.group(2).strip()
+                })
+                remaining_response = single_file_pattern.sub('', remaining_response, 1).strip() # Remove first match
 
-        # --- 3. Check for <filename> and <code> tags (for NEW code generation) ---
-        if '<filename>' in response and '<code>' in response:
-            filename_start = response.find('<filename>') + len('<filename>')
-            filename_end = response.find('</filename>')
-            code_start = response.find('<code>') + len('<code>')
-            code_end = response.find('</code>')
+        # 5. Extract Execute Command
+        execute_match = execute_pattern.search(remaining_response)
+        if execute_match:
+            parsed_components['command'] = execute_match.group(1).strip()
+            remaining_response = execute_pattern.sub('', remaining_response, 1).strip() # Remove first match
 
-            if filename_start < filename_end and code_start < code_end:
-                result['type'] = 'code'
-                result['filename'] = response[filename_start:filename_end].strip()
-                result['code'] = response[code_start:code_end].strip()
-                return result
+        # 6. Whatever remains is the explanation
+        parsed_components['explanation'] = remaining_response if remaining_response else None
 
-        # --- 4. Check for Markdown Code Blocks (Fallback for commands) ---
-        # This regex looks for ```[language]\n[content]\n```
-        # It's non-greedy (.*?) and uses re.DOTALL to match across newlines
-        markdown_code_block_pattern = re.compile(r'```(?:\w+)?\n(.*?)\n```', re.DOTALL)
-        match = markdown_code_block_pattern.search(response)
-        if match:
-            extracted_command = match.group(1).strip()
-            # If a markdown code block is found, treat it as a command
-            result['type'] = 'command'
-            result['command'] = extracted_command
-            return result # Return if a markdown code block is found and treated as command
-
-        # --- 5. Default to Explanation ---
-        # If none of the above formats are matched, it's a plain explanation.
-        return result
+        return parsed_components
 
 
     def _read_output_stream(self, stream, output_list):
@@ -925,9 +930,10 @@ Strict Guidelines for your responses:
                 print(f"{Colors.RED}AI Debugging Error: {ai_response_raw}{Colors.END}")
                 continue
 
+            # Use the new generalized parse_ai_response
             parsed_debug_response = self._parse_ai_response(ai_response_raw)
 
-            if parsed_debug_response['type'] == 'command' and parsed_debug_response['command']:
+            if parsed_debug_response['command']: # AI suggests an execute command for fix
                 fix_command = parsed_debug_response['command']
                 print(f"\n{Colors.BLUE}AI suggests a fix command:{Colors.END} {fix_command}")
                 confirm_fix = input("Execute this fix? [y/N]: ").strip().lower()
@@ -940,7 +946,6 @@ Strict Guidelines for your responses:
                         rerun_choice = input(f"Attempt to re-run '{filename}' after applying fix? [y/N]: ").strip().lower()
                         if rerun_choice == 'y':
                             print(f"{Colors.CYAN}Re-running original code after fix...{Colors.END}")
-                            # Correctly call _run_code_file (not _execute_code_after_fix)
                             # Pass original code_content as that's what we're fixing for
                             if self._run_code_file(filename, code_content): # No deps needed on rerun as they should be installed
                                 return True # Successfully fixed and re-ran
@@ -955,21 +960,34 @@ Strict Guidelines for your responses:
                     print(f"{Colors.YELLOW}Fix execution skipped by user.{Colors.END}")
                     return False # User opted out of fix
 
-            elif parsed_debug_response['type'] == 'code' and parsed_debug_response['code']:
-                fixed_code = parsed_debug_response['code']
-                print(f"\n{Colors.BLUE}AI suggests corrected code for {filename}:{Colors.END}")
+            elif parsed_debug_response['new_files'] and len(parsed_debug_response['new_files']) == 1:
+                # If AI provided corrected code (as a single new file)
+                corrected_file_info = parsed_debug_response['new_files'][0]
+                fixed_filename = corrected_file_info['filename']
+                fixed_code = corrected_file_info['code']
+
+                # Ensure filename matches the one being debugged
+                if fixed_filename.lower() != filename.lower():
+                    print(f"{Colors.YELLOW}AI provided a corrected file named '{fixed_filename}' but we were debugging '{filename}'. Please review AI's suggestion.{Colors.END}")
+                    print(f"\n{Colors.YELLOW}AI's Suggested Code:{Colors.END}")
+                    print("-" * 50)
+                    print(fixed_code[:500] + ("..." if len(fixed_code) > 500 else ""))
+                    print("-" * 50)
+                    return False # Cannot automatically proceed if filename mismatch
+
+                print(f"\n{Colors.BLUE}AI suggests corrected code for {fixed_filename}:{Colors.END}")
                 print("-" * 50)
                 print(fixed_code[:500] + ("..." if len(fixed_code) > 500 else ""))
                 print("-" * 50)
                 
                 confirm_save = input("Save corrected code to file? [y/N]: ").strip().lower()
                 if confirm_save == 'y':
-                    if self._create_file(filename, fixed_code):
-                        print(f"{Colors.GREEN}Corrected code saved to {filename}.{Colors.END}")
-                        rerun_choice = input(f"Attempt to re-run '{filename}' with corrected code? [y/N]: ").strip().lower()
+                    if self._create_file(fixed_filename, fixed_code):
+                        print(f"{Colors.GREEN}Corrected code saved to {fixed_filename}.{Colors.END}")
+                        rerun_choice = input(f"Attempt to re-run '{fixed_filename}' with corrected code? [y/N]: ").strip().lower()
                         if rerun_choice == 'y':
                             print(f"{Colors.CYAN}Re-running code with AI-suggested corrections...{Colors.END}")
-                            if self._run_code_file(filename, fixed_code): # Re-run with new content
+                            if self._run_code_file(fixed_filename, fixed_code, parsed_debug_response['dependencies']): # Re-run with new content, pass new deps if any
                                 return True # Successfully fixed and re-ran
                             else:
                                 print(f"{Colors.YELLOW}Re-run failed even with corrected code. Trying next debug attempt if available.{Colors.END}")
@@ -982,10 +1000,40 @@ Strict Guidelines for your responses:
                     print(f"{Colors.YELLOW}Saving corrected code skipped by user.{Colors.END}")
                     return False
 
+            elif parsed_debug_response['edited_file']: # AI suggests an edit to existing file for fix
+                edited_file_info = parsed_debug_response['edited_file']
+                edited_filename = edited_file_info['filename']
+                edited_code = edited_file_info['code']
+
+                if edited_filename.lower() != filename.lower():
+                    print(f"{Colors.YELLOW}AI provided an edited file named '{edited_filename}' but we were debugging '{filename}'. Please review AI's suggestion.{Colors.END}")
+                    print(f"\n{Colors.YELLOW}AI's Suggested Edited Code:{Colors.END}")
+                    print("-" * 50)
+                    print(edited_code[:500] + ("..." if len(edited_code) > 500 else ""))
+                    print("-" * 50)
+                    return False # Cannot automatically proceed if filename mismatch
+
+                if self._apply_file_edit(edited_filename, edited_code):
+                    print(f"{Colors.GREEN}Edited code saved to {edited_filename}.{Colors.END}")
+                    rerun_choice = input(f"Attempt to re-run '{edited_filename}' with corrected code? [y/N]: ").strip().lower()
+                    if rerun_choice == 'y':
+                        print(f"{Colors.CYAN}Re-running code with AI-suggested corrections...{Colors.END}")
+                        # When re-running an edited file, its content is the 'edited_code'
+                        if self._run_code_file(edited_filename, edited_code, parsed_debug_response['dependencies']):
+                            return True
+                        else:
+                            print(f"{Colors.YELLOW}Re-run failed even with corrected code. Trying next debug attempt if available.{Colors.END}")
+                    else:
+                        print(f"{Colors.YELLOW}Corrected code saved, but re-run skipped by user.{Colors.END}")
+                        return False
+                else:
+                    print(f"{Colors.RED}Failed to save corrected code.{Colors.END}")
+                    return False
+
             else:
                 # AI provided an explanation or couldn't provide a direct fix
                 print(f"\n{Colors.YELLOW}AI Debugging Suggestion:{Colors.END}")
-                print(ai_response_raw)
+                print(parsed_debug_response['explanation'] if parsed_debug_response['explanation'] else ai_response_raw)
                 if attempt < DEBUG_ATTEMPTS:
                     retry_choice = input("Attempt another AI debugging pass? [y/N]: ").strip().lower()
                     if retry_choice != 'y':
@@ -1028,9 +1076,10 @@ Strict Guidelines for your responses:
                 print(f"{Colors.RED}AI Debugging Error: {ai_response_raw}{Colors.END}")
                 continue # Try next attempt
 
+            # Use the new generalized parse_ai_response
             parsed_debug_response = self._parse_ai_response(ai_response_raw)
 
-            if parsed_debug_response['type'] == 'command' and parsed_debug_response['command']:
+            if parsed_debug_response['command']:
                 suggested_command = parsed_debug_response['command']
                 print(f"\n{Colors.BLUE}AI suggests a new command:{Colors.END} {suggested_command}")
                 confirm_exec = input("Execute this suggested command? [y/N]: ").strip().lower()
@@ -1045,7 +1094,7 @@ Strict Guidelines for your responses:
             else:
                 # AI provided an explanation or couldn't provide a direct command fix
                 print(f"\n{Colors.YELLOW}AI Debugging Suggestion:{Colors.END}")
-                print(ai_response_raw)
+                print(parsed_debug_response['explanation'] if parsed_debug_response['explanation'] else ai_response_raw)
                 if attempt < DEBUG_ATTEMPTS:
                     retry_choice = input("Attempt another AI debugging pass? [y/N]: ").strip().lower()
                     if retry_choice != 'y':
@@ -1092,10 +1141,11 @@ Strict Guidelines for your responses:
             print(f"{Colors.RED}AI Edit Error: {ai_response_raw}{Colors.END}")
             return
 
+        # Use the new generalized parse_ai_response
         parsed_response = self._parse_ai_response(ai_response_raw)
 
-        if parsed_response['type'] == 'edited_code' and parsed_response['edited_filename'] == filename:
-            self._apply_file_edit(filename, parsed_response['edited_code'])
+        if parsed_response['edited_file'] and parsed_response['edited_file']['filename'] == filename:
+            self._apply_file_edit(parsed_response['edited_file']['filename'], parsed_response['edited_file']['code'])
         else:
             print(f"{Colors.YELLOW}AI did not provide a valid edited code response for '{filename}'.{Colors.END}")
             print(f"AI's response: \n{ai_response_raw}")
@@ -1191,60 +1241,86 @@ Strict Guidelines for your responses:
                     print(f"{Colors.RED}AI Error: {ai_response_raw}{Colors.END}")
                     continue
 
-                # Parse the AI's response
+                # Parse the AI's response using the new generalized parser
                 parsed = self._parse_ai_response(ai_response_raw)
                 
-                if parsed['type'] == 'command':
+                # --- Process AI Response ---
+                
+                # 1. Handle Dependencies (if any) - applies to new code generation (single or multiple)
+                if parsed['dependencies']:
+                    print(f"\n{Colors.BLUE}AI suggests dependencies: {parsed['dependencies']}{Colors.END}")
+                    confirm_install = input(f"Install these dependencies? [Y/n]: ").strip().lower()
+                    if confirm_install != 'n':
+                        print(f"{Colors.CYAN}Attempting to install dependencies...{Colors.END}")
+                        install_output, install_success = self._execute_command(parsed['dependencies'], show_command=True)
+                        print(install_output)
+                        if not install_success:
+                            print(f"{Colors.RED}Dependency installation failed. Proceeding, but subsequent operations might fail.{Colors.END}")
+                        else:
+                            print(f"{Colors.GREEN}Dependencies installed successfully.{Colors.END}")
+                    else:
+                        print(f"{Colors.YELLOW}Dependency installation skipped.{Colors.END}")
+
+
+                # 2. Handle Multiple New Files
+                if parsed['new_files']:
+                    print(f"\n{Colors.PURPLE}AI generated {len(parsed['new_files'])} new file(s).{Colors.END}")
+                    for file_info in parsed['new_files']:
+                        filename = file_info['filename']
+                        code = file_info['code']
+                        print(f"\n{Colors.CYAN}Preview of '{filename}':{Colors.END}")
+                        print("-" * 50)
+                        print(code[:500] + ("..." if len(code) > 500 else ""))
+                        print("-" * 50)
+                        
+                        confirm_save = input(f"\nSave '{filename}'? [Y/n]: ")
+                        if confirm_save.lower() != 'n':
+                            if not self._create_file(filename, code):
+                                print(f"{Colors.RED}Failed to save '{filename}'. Skipping execution for this file.{Colors.END}")
+                                # If file creation fails, it's probably best not to try to run it.
+                                continue # Go to next file in loop
+                        else:
+                            print(f"{Colors.YELLOW}Saving '{filename}' skipped by user.{Colors.END}")
+                            continue # Go to next file in loop
+
+                        # Offer to run the file after creation, if it's a known executable script type
+                        if filename.lower().endswith(('.py', '.js', '.sh', '.ps1')):
+                            run_confirm = input(f"Run '{filename}'? [y/N]: ")
+                            if run_confirm.lower() == 'y':
+                                # When running a newly created file, its content is 'code'
+                                # Dependencies have ideally been handled globally already
+                                self._run_code_file(filename, code)
+                            else:
+                                print(f"{Colors.YELLOW}Running '{filename}' skipped by user.{Colors.END}")
+                        else:
+                            print(f"{Colors.YELLOW}File saved. Not a recognized executable script type for direct running.{Colors.END}")
+                
+                # 3. Handle Edited File (already handled by _handle_edit mostly, but good to have a fallback)
+                elif parsed['edited_file']: # This implies a direct AI response, not from the 'edit' command flow
+                    filename = parsed['edited_file']['filename']
+                    code = parsed['edited_file']['code']
+                    print(f"\n{Colors.PURPLE}AI suggests edited content for: {filename}{Colors.END}")
+                    self._apply_file_edit(filename, code)
+
+                # 4. Handle Single Command
+                elif parsed['command']:
                     # If AI suggests a command
                     if self.config.get('auto_execute', False):
                         # Auto-execute if enabled in config
                         output, success = self._execute_command(parsed['command'])
-                        print(output) # Print output directly here
+                        print(output)
                     else:
                         # Prompt for confirmation before executing
                         confirm = input(f"\nExecute command? {Colors.YELLOW}{parsed['command']}{Colors.END} [Y/n]: ")
                         if confirm.lower() != 'n':
                             output, success = self._execute_command(parsed['command'])
-                            print(output) # Print output directly here
+                            print(output)
                         else:
                             print(f"{Colors.YELLOW}Command execution skipped.{Colors.END}")
-                            
-                elif parsed['type'] == 'code':
-                    # If AI generates new code
-                    print(f"\n{Colors.PURPLE}Generated code for: {parsed['filename']}{Colors.END}")
-                    print(f"{Colors.CYAN}Preview:{Colors.END}")
-                    print("-" * 50)
-                    # Show a preview of the code (first 500 characters)
-                    print(parsed['code'][:500] + ("..." if len(parsed['code']) > 500 else ""))
-                    print("-" * 50)
-                    
-                    confirm = input(f"\nSave to {parsed['filename']}? [Y/n]: ")
-                    if confirm.lower() != 'n':
-                        if self._create_file(parsed['filename'], parsed['code']):
-                            # Offer to run the file after creation, if it's a known executable script type
-                            if parsed['filename'].lower().endswith(('.py', '.js', '.sh', '.ps1')):
-                                run_confirm = input(f"Run {parsed['filename']}? [y/N]: ")
-                                if run_confirm.lower() == 'y':
-                                    # Pass code_content and new dependencies to _run_code_file for proactive install
-                                    self._run_code_file(parsed['filename'], parsed['code'], parsed['dependencies'])
-                            else:
-                                print(f"{Colors.YELLOW}File saved. Not a recognized executable script type for direct running.{Colors.END}")
-                        else:
-                            print(f"{Colors.RED}Failed to save file.{Colors.END}")
                 
-                elif parsed['type'] == 'edited_code':
-                    # If AI returns edited code for an existing file
-                    # This case is handled directly by _handle_edit, but good to have here for completeness
-                    # if a direct response happened to be this type outside _handle_edit flow.
-                    if parsed['edited_filename'] and parsed['edited_code']:
-                        print(f"\n{Colors.YELLOW}AI provided edited content for {parsed['edited_filename']}.{Colors.END}")
-                        self._apply_file_edit(parsed['edited_filename'], parsed['edited_code'])
-                    else:
-                        print(f"{Colors.RED}AI provided an incomplete edited code response.{Colors.END}")
-
-                else:
-                    # If AI provides a regular explanation/conversational response
-                    print(f"\n{ai_response_raw}")
+                # 5. Handle General Explanation
+                elif parsed['explanation']:
+                    print(f"\n{parsed['explanation']}")
 
             except KeyboardInterrupt:
                 # Handle Ctrl+C during input
@@ -1301,6 +1377,7 @@ Strict Guidelines for your responses:
         print(f"{Colors.YELLOW}New: If generated code or commands fail, Bash.ai can attempt to debug it with AI assistance.{Colors.END}")
         print(f"{Colors.YELLOW}New: Bash.ai can now proactively offer to install dependencies for generated code.{Colors.END}")
         print(f"{Colors.YELLOW}New: You can now ask Bash.ai to edit existing files with 'edit <filename> <instruction>'.{Colors.END}")
+        print(f"{Colors.YELLOW}New: Bash.ai can now generate multiple files at once (e.g., HTML and Python server).{Colors.END}")
 
 
     def _show_config(self):
@@ -1352,34 +1429,42 @@ def main():
         # Single command mode: join all arguments into one string and query AI
         command_query = ' '.join(args.command)
         print(f"{Colors.BLUE}Querying AI for: '{command_query}'{Colors.END}")
-        ai_response, success = ai._query_ai(command_query, ai._get_system_prompt())
+        ai_response_raw, success = ai._query_ai(command_query, ai._get_system_prompt())
         
-        if success:
-            parsed = ai._parse_ai_response(ai_response)
-            if parsed['type'] == 'command':
-                # Execute the command directly in single command mode
-                output, _ = ai._execute_command(parsed['command'])
-                print(output)
-            elif parsed['type'] == 'code':
-                # In single command mode, just print code, don't save/run automatically
-                print(f"\n{Colors.PURPLE}Generated code for: {parsed['filename']}{Colors.END}")
-                print(parsed['code'])
-                # If there are dependencies in single command mode, also print them
-                if parsed['dependencies']:
-                    print(f"\n{Colors.YELLOW}Suggested dependencies: {parsed['dependencies']}{Colors.END}")
-            elif parsed['type'] == 'edited_code':
-                 # In single command mode, just print edited code preview
-                print(f"\n{Colors.PURPLE}AI suggests edited code for: {parsed['edited_filename']}{Colors.END}")
-                print(f"{Colors.CYAN}Preview:{Colors.END}")
-                print("-" * 50)
-                print(parsed['edited_code'][:500] + ("..." if len(parsed['edited_code']) > 500 else ""))
-                print("-" * 50)
-                print(f"{Colors.YELLOW}In single command mode, file changes are not automatically saved. Use interactive mode (just run 'bashai') to apply edits.{Colors.END}")
-            else:
-                # Print explanation
-                print(ai_response)
-        else:
-            print(f"{Colors.RED}Error: {ai_response}{Colors.END}")
+        if not success:
+            print(f"{Colors.RED}AI Error: {ai_response_raw}{Colors.END}")
+            return
+
+        parsed = ai._parse_ai_response(ai_response_raw)
+
+        # In single command mode, we print, but don't save/execute automatically
+        if parsed['dependencies']:
+            print(f"\n{Colors.YELLOW}Suggested dependencies: {parsed['dependencies']}{Colors.END}")
+
+        if parsed['new_files']:
+            print(f"\n{Colors.PURPLE}AI generated the following file(s):{Colors.END}")
+            for file_info in parsed['new_files']:
+                print(f"\n{Colors.CYAN}--- {file_info['filename']} ---{Colors.END}")
+                print(file_info['code'])
+                print(f"{Colors.CYAN}--------------------{Colors.END}")
+            print(f"{Colors.YELLOW}In single command mode, files are not automatically saved. Use interactive mode (just run 'bashai') to save them.{Colors.END}")
+        
+        elif parsed['edited_file']:
+            print(f"\n{Colors.PURPLE}AI suggests edited code for: {parsed['edited_file']['filename']}{Colors.END}")
+            print(f"{Colors.CYAN}Preview:{Colors.END}")
+            print("-" * 50)
+            print(parsed['edited_file']['code'][:500] + ("..." if len(parsed['edited_file']['code']) > 500 else ""))
+            print("-" * 50)
+            print(f"{Colors.YELLOW}In single command mode, file changes are not automatically saved. Use interactive mode (just run 'bashai') to apply edits.{Colors.END}")
+
+        elif parsed['command']:
+            print(f"\n{Colors.PURPLE}AI suggests command:{Colors.END} {parsed['command']}{Colors.END}")
+            # In single command mode, we just print the command, not execute
+            print(f"{Colors.YELLOW}In single command mode, commands are not automatically executed.{Colors.END}")
+        
+        elif parsed['explanation']:
+            print(f"\n{parsed['explanation']}")
+
     else:
         # Interactive mode if no command arguments are provided
         ai._interactive_mode()
