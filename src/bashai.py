@@ -36,14 +36,9 @@ except ImportError:
 # This configuration file will store the server URL, Supabase URL, and other settings
 CONFIG_PATH = Path.home() / ".bashai_config.json"
 
-# --- Hardcoded Defaults (User-Friendly) ---
-# These are the *default* values. Users can still override the server URL with --server.
-# The Supabase public URL and Anon Key are safe to be in client code.
+
 DEFAULT_SERVER_URL = "http://84.247.164.54:8000/" # Default AI server URL
 
-# IMPORTANT: Replace these with your actual Supabase Project URL and Anon Key.
-# It's recommended to set them as environment variables (e.g., in your shell profile)
-# for easier management, but hardcoding here is also acceptable as they are public keys.
 SUPABASE_URL_PUBLIC = os.getenv("SUPABASE_URL_PUBLIC", "https://modualolzuqetjpfigsq.supabase.co")
 SUPABASE_ANON_KEY_PUBLIC = os.getenv("SUPABASE_ANON_KEY_PUBLIC", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1vZHVhbG9senVxZXRqcGZpZ3NxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkxNDg2MDIsImV4cCI6MjA2NDcyNDYwMn0.lWKw1dgbJsKvo8aGXofNIsN7iAi6uFn1G8FgeSbGu2s")
 
@@ -139,6 +134,10 @@ class Spinner:
         self.stop_running = True
         if self.thread:
             self.thread.join(timeout=0.5) # Give a short time for the thread to clean up
+        # Clear the line where the spinner was after it stops
+        sys.stdout.write("\r" + " " * (len(self.message) + 10) + "\r")
+        sys.stdout.flush()
+
 
 class BashAI:
     """
@@ -815,12 +814,17 @@ Strict Guidelines for your responses:
             # Main thread waits for user input to stop or process to finish
             while process.poll() is None: # While the child process is still running
                 try:
-                    # Prompt for user input to stop the process
+                    # Clear the current spinner/status line before prompting for input
+                    sys.stdout.write("\r" + " " * (os.get_terminal_size().columns) + "\r")
+                    sys.stdout.flush()
                     user_input = input(f"{Colors.CYAN} (Type 'stop' and press Enter to halt) > {Colors.END}").strip().lower()
                     if user_input == 'stop':
                         print(f"{Colors.YELLOW}Attempting to stop process...{Colors.END}")
                         process.terminate() # Send SIGTERM (or equivalent on Windows)
                         break # Exit the loop
+                    # If input was not 'stop', redraw the spinner line to continue showing progress
+                    sys.stdout.write(Colors.wrap_for_readline(f"\r{Colors.CYAN}⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏{Colors.END} Running... "))
+                    sys.stdout.flush()
                 except EOFError: # Catch Ctrl+D
                     print(f"\n{Colors.YELLOW}EOF detected. Attempting to stop process...{Colors.END}")
                     process.terminate()
@@ -860,6 +864,11 @@ Strict Guidelines for your responses:
                     process.stdout.close()
                 if process.stderr:
                     process.stderr.close()
+
+            # Ensure the spinner line is cleared at the very end
+            sys.stdout.write("\r" + " " * (os.get_terminal_size().columns) + "\r")
+            sys.stdout.flush()
+
 
         # After execution (or termination), check return code and potentially debug
         full_stdout = "\n".join(stdout_lines)
