@@ -42,7 +42,7 @@ SUPABASE_URL_PUBLIC = os.getenv("SUPABASE_URL_PUBLIC", "https://modualolzuqetjpf
 SUPABASE_ANON_KEY_PUBLIC = os.getenv("SUPABASE_ANON_KEY_PUBLIC", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1vZHVhbG9senVxZXRqcGZpZ3NxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkxNDg2MDIsImV4cCI6MjA2NDcyNDYwMn0.lWKw1dgbJsKvo8aGXofNIsN7iAi6uFn1G8FgeSbGu2s")
 
 # Max file size to display in 'view' command or send to AI for analysis (in bytes)
-MAX_FILE_CONTENT_SIZE = 10 * 1024 # 10 KB
+MAX_FILE_CONTENT_SIZE = 10 * 1024 * 1024  # 10 MB
 
 class Colors:
     """ANSI color codes for cross-platform terminal colors"""
@@ -543,6 +543,9 @@ class BashAI:
                     if error:
                         print(f"{Colors.RED}Stderr:\n{error}{Colors.END}")
                     
+                    # Clear spinner line before asking for debug input to prevent overlap
+                    sys.stdout.write("\r" + " " * (os.get_terminal_size().columns) + "\r")
+                    sys.stdout.flush()
                     debug_choice = input(f"{Colors.YELLOW}Attempt to debug this command with AI? [y/N]: ").strip().lower()
                     if debug_choice == 'y':
                         return self._debug_command_error(cmd, error)
@@ -643,7 +646,7 @@ Strict Guidelines for your responses:
 6.  **For Debugging Command Errors**: If you are provided with a command and its error message (from stderr), provide EITHER:
     * A corrected `<execute>` command.
     * An `<execute>` command to install a missing tool.
-    * An explanation if no direct fix can be provided (without special tags).
+    * An explanation if you cannot provide a direct command fix (without special tags).
     **CRITICAL**: If your suggested fix is a command, it MUST be inside `<execute>` tags.
 7.  **For Explanations/Conversational Responses**: If the request is not for a command or code, just provide the explanation text directly. Do NOT use any special tags.
 
@@ -767,13 +770,19 @@ Strict Guidelines for your responses:
         # --- Proactive Dependency Installation ---
         if dependencies_cmd:
             print(f"\n{Colors.BLUE}Dependencies suggested: {dependencies_cmd}{Colors.END}")
+            # Clear spinner line before asking for debug input to prevent overlap
+            sys.stdout.write("\r" + " " * (os.get_terminal_size().columns) + "\r")
+            sys.stdout.flush()
             confirm_install = input(f"Install these dependencies before running '{filename}'? [Y/n]: ").strip().lower()
             if confirm_install != 'n':
                 print(f"{Colors.CYAN}Attempting to install dependencies...{Colors.END}")
                 install_output, install_success = self._execute_command(dependencies_cmd, show_command=True)
-                print(install_output)
+                print(install_output) # Print output of install command
                 if not install_success:
                     print(f"{Colors.RED}Dependency installation failed. Attempting to run code anyway, but it might fail.{Colors.END}")
+                    # Clear spinner line before asking for debug input to prevent overlap
+                    sys.stdout.write("\r" + " " * (os.get_terminal_size().columns) + "\r")
+                    sys.stdout.flush()
                     confirm_proceed = input("Proceed to run code despite dependency installation failure? [y/N]: ").strip().lower()
                     if confirm_proceed != 'y':
                         print(f"{Colors.YELLOW}Code execution aborted due to failed dependency installation.{Colors.END}")
@@ -889,6 +898,9 @@ Strict Guidelines for your responses:
             if full_stderr:
                 print(f"{Colors.RED}Stderr:\n{full_stderr}{Colors.END}")
 
+            # Clear spinner line before asking for debug input to prevent overlap
+            sys.stdout.write("\r" + " " * (os.get_terminal_size().columns) + "\r")
+            sys.stdout.flush()
             debug_choice = input(f"{Colors.YELLOW}Attempt to debug with AI? [y/N]: ").strip().lower()
             if debug_choice == 'y':
                 return self._debug_code_error(filename, code_content, full_stderr)
@@ -928,7 +940,7 @@ Strict Guidelines for your responses:
 
             if not success:
                 print(f"{Colors.RED}AI Debugging Error: {ai_response_raw}{Colors.END}")
-                continue
+                return False # Stop debugging if AI query fails
 
             # Use the new generalized parse_ai_response
             parsed_debug_response = self._parse_ai_response(ai_response_raw)
@@ -936,13 +948,18 @@ Strict Guidelines for your responses:
             if parsed_debug_response['command']: # AI suggests an execute command for fix
                 fix_command = parsed_debug_response['command']
                 print(f"\n{Colors.BLUE}AI suggests a fix command:{Colors.END} {fix_command}")
+                # Clear spinner line before asking for debug input to prevent overlap
+                sys.stdout.write("\r" + " " * (os.get_terminal_size().columns) + "\r")
+                sys.stdout.flush()
                 confirm_fix = input("Execute this fix? [y/N]: ").strip().lower()
                 if confirm_fix == 'y':
                     fix_output, fix_success = self._execute_command(fix_command, show_command=True) # Show execution
                     print(fix_output)
                     if fix_success:
                         print(f"{Colors.GREEN}Fix command executed successfully.{Colors.END}")
-                        # Offer to re-run the original code after the fix
+                        # Clear spinner line before asking for debug input to prevent overlap
+                        sys.stdout.write("\r" + " " * (os.get_terminal_size().columns) + "\r")
+                        sys.stdout.flush()
                         rerun_choice = input(f"Attempt to re-run '{filename}' after applying fix? [y/N]: ").strip().lower()
                         if rerun_choice == 'y':
                             print(f"{Colors.CYAN}Re-running original code after fix...{Colors.END}")
@@ -980,10 +997,16 @@ Strict Guidelines for your responses:
                 print(fixed_code[:500] + ("..." if len(fixed_code) > 500 else ""))
                 print("-" * 50)
                 
+                # Clear spinner line before asking for debug input to prevent overlap
+                sys.stdout.write("\r" + " " * (os.get_terminal_size().columns) + "\r")
+                sys.stdout.flush()
                 confirm_save = input("Save corrected code to file? [y/N]: ").strip().lower()
                 if confirm_save == 'y':
                     if self._create_file(fixed_filename, fixed_code):
                         print(f"{Colors.GREEN}Corrected code saved to {fixed_filename}.{Colors.END}")
+                        # Clear spinner line before asking for debug input to prevent overlap
+                        sys.stdout.write("\r" + " " * (os.get_terminal_size().columns) + "\r")
+                        sys.stdout.flush()
                         rerun_choice = input(f"Attempt to re-run '{fixed_filename}' with corrected code? [y/N]: ").strip().lower()
                         if rerun_choice == 'y':
                             print(f"{Colors.CYAN}Re-running code with AI-suggested corrections...{Colors.END}")
@@ -1015,6 +1038,9 @@ Strict Guidelines for your responses:
 
                 if self._apply_file_edit(edited_filename, edited_code):
                     print(f"{Colors.GREEN}Edited code saved to {edited_filename}.{Colors.END}")
+                    # Clear spinner line before asking for debug input to prevent overlap
+                    sys.stdout.write("\r" + " " * (os.get_terminal_size().columns) + "\r")
+                    sys.stdout.flush()
                     rerun_choice = input(f"Attempt to re-run '{edited_filename}' with corrected code? [y/N]: ").strip().lower()
                     if rerun_choice == 'y':
                         print(f"{Colors.CYAN}Re-running code with AI-suggested corrections...{Colors.END}")
@@ -1030,19 +1056,21 @@ Strict Guidelines for your responses:
                     print(f"{Colors.RED}Failed to save corrected code.{Colors.END}")
                     return False
 
-            else:
-                # AI provided an explanation or couldn't provide a direct fix
+            else: # AI provided an explanation or couldn't provide a direct fix
                 print(f"\n{Colors.YELLOW}AI Debugging Suggestion:{Colors.END}")
                 print(parsed_debug_response['explanation'] if parsed_debug_response['explanation'] else ai_response_raw)
                 if attempt < DEBUG_ATTEMPTS:
+                    # Clear spinner line before asking for debug input to prevent overlap
+                    sys.stdout.write("\r" + " " * (os.get_terminal_size().columns) + "\r")
+                    sys.stdout.flush()
                     retry_choice = input("Attempt another AI debugging pass? [y/N]: ").strip().lower()
                     if retry_choice != 'y':
                         print(f"{Colors.YELLOW}Debugging aborted by user.{Colors.END}")
-                        return False
+                        return False # Explicitly return False if user aborts
                 else:
                     print(f"{Colors.RED}AI could not provide a suitable fix after {DEBUG_ATTEMPTS} attempts.{Colors.END}")
                     print(f"{Colors.RED}Manual intervention may be required.{Colors.END}")
-                    return False
+                    return False # Return False if max attempts reached
 
         return False # If loop finishes without a successful fix and re-run
 
@@ -1074,7 +1102,7 @@ Strict Guidelines for your responses:
 
             if not success:
                 print(f"{Colors.RED}AI Debugging Error: {ai_response_raw}{Colors.END}")
-                continue # Try next attempt
+                return f"AI Debugging Error: {ai_response_raw}", False # Stop debugging if AI query fails
 
             # Use the new generalized parse_ai_response
             parsed_debug_response = self._parse_ai_response(ai_response_raw)
@@ -1082,6 +1110,9 @@ Strict Guidelines for your responses:
             if parsed_debug_response['command']:
                 suggested_command = parsed_debug_response['command']
                 print(f"\n{Colors.BLUE}AI suggests a new command:{Colors.END} {suggested_command}")
+                # Clear spinner line before asking for debug input to prevent overlap
+                sys.stdout.write("\r" + " " * (os.get_terminal_size().columns) + "\r")
+                sys.stdout.flush()
                 confirm_exec = input("Execute this suggested command? [y/N]: ").strip().lower()
                 if confirm_exec == 'y':
                     output, exec_success = self._execute_command(suggested_command, show_command=True)
@@ -1096,14 +1127,17 @@ Strict Guidelines for your responses:
                 print(f"\n{Colors.YELLOW}AI Debugging Suggestion:{Colors.END}")
                 print(parsed_debug_response['explanation'] if parsed_debug_response['explanation'] else ai_response_raw)
                 if attempt < DEBUG_ATTEMPTS:
+                    # Clear spinner line before asking for debug input to prevent overlap
+                    sys.stdout.write("\r" + " " * (os.get_terminal_size().columns) + "\r")
+                    sys.stdout.flush()
                     retry_choice = input("Attempt another AI debugging pass? [y/N]: ").strip().lower()
                     if retry_choice != 'y':
                         print(f"{Colors.YELLOW}Command debugging aborted by user.{Colors.END}")
-                        return f"{Colors.YELLOW}Command debugging aborted by user.{Colors.END}", False
+                        return f"{Colors.YELLOW}Command debugging aborted by user.{Colors.END}", False # Explicitly return False
                 else:
                     print(f"{Colors.RED}AI could not provide a suitable fix for the command after {DEBUG_ATTEMPTS} attempts.{Colors.END}")
                     print(f"{Colors.RED}Manual intervention may be required.{Colors.END}")
-                    return f"{Colors.RED}Command failed and AI could not debug.{Colors.END}", False
+                    return f"{Colors.RED}Command failed and AI could not debug.{Colors.END}", False # Return False if max attempts reached
 
         return f"{Colors.RED}Command failed and AI could not debug after multiple attempts.{Colors.END}", False # Fallback if all attempts fail
 
@@ -1192,6 +1226,16 @@ Strict Guidelines for your responses:
                 elif user_input.lower() == 'clear':
                     os.system('cls' if self.is_windows else 'clear') # Clear screen
                     continue
+                
+                # Handle 'ls' for Linux/macOS and 'dir' for Windows directly
+                elif user_input.lower() == 'ls' and (self.is_linux or self.is_macos):
+                    output, success = self._execute_command("ls -F", show_command=False) # -F to show type
+                    print(output)
+                    continue
+                elif user_input.lower() == 'dir' and self.is_windows:
+                    output, success = self._execute_command("dir", show_command=False)
+                    print(output)
+                    continue
                     
                 elif user_input.lower() == 'config':
                     self._show_config()
@@ -1201,7 +1245,7 @@ Strict Guidelines for your responses:
                     self._authenticate_user()
                     continue
                 
-                elif user_input.lower() == 'list': # New command to list directory contents
+                elif user_input.lower() == 'list': # New command to list directory contents (AI-powered version)
                     print(f"\n{Colors.CYAN}{self._get_current_directory_listing()}{Colors.END}")
                     continue
                     
@@ -1249,11 +1293,14 @@ Strict Guidelines for your responses:
                 # 1. Handle Dependencies (if any) - applies to new code generation (single or multiple)
                 if parsed['dependencies']:
                     print(f"\n{Colors.BLUE}AI suggests dependencies: {parsed['dependencies']}{Colors.END}")
+                    # Clear spinner line before asking for input
+                    sys.stdout.write("\r" + " " * (os.get_terminal_size().columns) + "\r")
+                    sys.stdout.flush()
                     confirm_install = input(f"Install these dependencies? [Y/n]: ").strip().lower()
                     if confirm_install != 'n':
                         print(f"{Colors.CYAN}Attempting to install dependencies...{Colors.END}")
                         install_output, install_success = self._execute_command(parsed['dependencies'], show_command=True)
-                        print(install_output)
+                        print(install_output) # Print output of install command
                         if not install_success:
                             print(f"{Colors.RED}Dependency installation failed. Proceeding, but subsequent operations might fail.{Colors.END}")
                         else:
@@ -1273,6 +1320,9 @@ Strict Guidelines for your responses:
                         print(code[:500] + ("..." if len(code) > 500 else ""))
                         print("-" * 50)
                         
+                        # Clear spinner line before asking for input
+                        sys.stdout.write("\r" + " " * (os.get_terminal_size().columns) + "\r")
+                        sys.stdout.flush()
                         confirm_save = input(f"\nSave '{filename}'? [Y/n]: ")
                         if confirm_save.lower() != 'n':
                             if not self._create_file(filename, code):
@@ -1285,6 +1335,9 @@ Strict Guidelines for your responses:
 
                         # Offer to run the file after creation, if it's a known executable script type
                         if filename.lower().endswith(('.py', '.js', '.sh', '.ps1')):
+                            # Clear spinner line before asking for input
+                            sys.stdout.write("\r" + " " * (os.get_terminal_size().columns) + "\r")
+                            sys.stdout.flush()
                             run_confirm = input(f"Run '{filename}'? [y/N]: ")
                             if run_confirm.lower() == 'y':
                                 # When running a newly created file, its content is 'code'
@@ -1302,15 +1355,17 @@ Strict Guidelines for your responses:
                     print(f"\n{Colors.PURPLE}AI suggests edited content for: {filename}{Colors.END}")
                     self._apply_file_edit(filename, code)
 
-                # 4. Handle Single Command
-                elif parsed['command']:
+                # 4. Handle Single Command (This now also covers commands from multi-file generation's <execute> tag)
+                if parsed['command']: # Note: 'if' not 'elif' to allow execution after multi-file creation
                     # If AI suggests a command
                     if self.config.get('auto_execute', False):
                         # Auto-execute if enabled in config
                         output, success = self._execute_command(parsed['command'])
                         print(output)
                     else:
-                        # Prompt for confirmation before executing
+                        # Clear spinner line before asking for input
+                        sys.stdout.write("\r" + " " * (os.get_terminal_size().columns) + "\r")
+                        sys.stdout.flush()
                         confirm = input(f"\nExecute command? {Colors.YELLOW}{parsed['command']}{Colors.END} [Y/n]: ")
                         if confirm.lower() != 'n':
                             output, success = self._execute_command(parsed['command'])
@@ -1319,7 +1374,7 @@ Strict Guidelines for your responses:
                             print(f"{Colors.YELLOW}Command execution skipped.{Colors.END}")
                 
                 # 5. Handle General Explanation
-                elif parsed['explanation']:
+                elif parsed['explanation']: # Only if no other structured output was found
                     print(f"\n{parsed['explanation']}")
 
             except KeyboardInterrupt:
@@ -1361,8 +1416,10 @@ Strict Guidelines for your responses:
         print(f"\n{Colors.BOLD}Bash.ai Client Commands:{Colors.END}")
         print(f"  {Colors.GREEN}exit / quit{Colors.END} - Exit the Bash.ai assistant.")
         print(f"  {Colors.GREEN}clear{Colors.END}     - Clear the terminal screen.")
+        print(f"  {Colors.GREEN}ls{Colors.END}        - List files in the current directory (Linux/macOS shell passthrough).")
+        print(f"  {Colors.GREEN}dir{Colors.END}       - List files in the current directory (Windows shell passthrough).")
         print(f"  {Colors.GREEN}cd <path>{Colors.END} - Change the current working directory.")
-        print(f"  {Colors.GREEN}list{Colors.END}      - List contents of the current directory.")
+        print(f"  {Colors.GREEN}list{Colors.END}      - List contents of the current directory (AI-powered).")
         print(f"  {Colors.GREEN}view <file>{Colors.END} - Display content of a specified file.")
         print(f"  {Colors.GREEN}open <file/dir>{Colors.END} - Open a file or directory with its default application.")
         print(f"  {Colors.GREEN}edit <file> <instruction>{Colors.END} - Ask AI to edit a file with your instruction.")
