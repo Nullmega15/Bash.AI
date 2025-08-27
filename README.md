@@ -1,4 +1,4 @@
-# Bash.ai 🤖💻
+# Bash.ai
 
 AI-powered terminal assistant that leverages a remote DeepSeek Coder model. Bash.ai brings natural language to code generation and command execution across Windows, Linux, and macOS—right from your terminal.
 
