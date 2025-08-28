@@ -1,6 +1,6 @@
 # Bash.ai 🤖💻
 
-AI-powered terminal assistant that leverages a remote DeepSeek Coder model hosted privately. Natural language to code generation and command execution across Windows, Linux, and macOS.
+AI-powered terminal assistant. Natural language to code generation and command execution across Windows, Linux, and macOS.
 
 ## 🌟 Features
 
@@ -282,3 +282,4 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ---
 
 Made with ❤️ by the Bash.ai team
+
