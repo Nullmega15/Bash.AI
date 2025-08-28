@@ -1,3 +1,10 @@
+<<<<<<< HEAD
 # Bash.ai Client Dependencies
 requests>=2.31.0 # For making HTTP requests to the AI server
 pyreadline3>=3.4.1; sys_platform == 'win32' # For readline functionality on Windows
+=======
+# Bash.ai Client Dependencies
+requests>=2.31.0 # For making HTTP requests to the AI server
+pyreadline3>=3.4.1; sys_platform == 'win32' # For readline functionality on Windows
+supabase>=2.0.0 # For Supabase client and authentication
+>>>>>>> da5937da5444eb509df001d97b9b6793e0c4a5cd
