@@ -23,6 +23,9 @@ cd bash.ai
 ### 2. Install Client Dependencies & Setup
 
 **Linux/macOS:**
+```run
+sudo apt install python3.12-venv
+```
 ```bash
 ./install_linux.sh
 ```
@@ -282,5 +285,6 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ---
 
 Made with ❤️ by the Bash.ai team
+
 
 
