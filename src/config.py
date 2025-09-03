@@ -9,7 +9,7 @@ CONFIG_PATH = Path.home() / ".bashai_config.json"
 # Default configuration values. These will be used if a config file doesn't exist
 # or if specific keys are missing from an existing file.
 DEFAULT_CONFIG = {
-    "server_url": "http://localhost:8000/", # Default AI server URL
+    "server_url": "http://84.247.164.54:8000/", # Default AI server URL
     "max_history": 100,                   # Maximum number of commands to keep in history
     "safe_mode": True,                    # Enable/disable blocking of dangerous commands
     "auto_execute": False                 # Enable/disable automatic execution of AI-suggested commands
@@ -59,8 +59,3 @@ if __name__ == "__main__":
     print("Loading config...")
     current_config = load_config()
     print("Current Config:", current_config)
-
-    # Example of modifying and saving config
-    # current_config["auto_execute"] = True
-    # save_config(current_config)
-    # print("Config after modification:", load_config())
